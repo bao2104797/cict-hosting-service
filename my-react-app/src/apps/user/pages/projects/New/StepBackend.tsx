@@ -392,18 +392,18 @@ export function StepBackend() {
 
       <HintBox title="Hướng dẫn">
         <ul className="list-disc list-inside space-y-1 text-sm">
-          <li>Chọn Spring Boot hoặc Node.js</li>
+          <li><strong>Chọn Framework:</strong> Spring Boot hoặc Node.js</li>
           <li>
-            <strong>Upload ZIP:</strong> Tên thư mục gốc trùng với tên dự án. Spring Boot cần <code className="bg-muted px-1 rounded">pom.xml</code> hoặc <code className="bg-muted px-1 rounded">build.gradle</code>. Node cần <code className="bg-muted px-1 rounded">package.json</code>
+            <strong>Upload ZIP:</strong> Tên thư mục gốc trùng với tên dự án.
           </li>
           <li>
-            <strong>Docker Image:</strong> Định dạng <code className="bg-muted px-1 rounded">owner/name:tag</code> (ví dụ: <code className="bg-muted px-1 rounded">docker.io/user/app:1.0.0</code>)
+            <strong>Docker Image:</strong> Phải có file Dockerfile trong thư mục gốc
           </li>
           <li>
-            <strong>DNS:</strong> Chỉ a-z, 0-9, '-', dài 3-63 ký tự, không bắt đầu/kết thúc bằng '-' (ví dụ: <code className="bg-muted px-1 rounded">api.myapp.local.test</code>)
+            <strong>Domain Name:</strong> Không chứa ký tự đặc biệt, không bắt đầu/kết thúc bằng '-' (ví dụ: <code className="bg-muted px-1 rounded">api.myapp.local.test</code>)
           </li>
           <li>
-            <strong>Kết nối Database:</strong> Bạn có thể nhập thủ công thông tin kết nối database hoặc chọn từ danh sách database đã tạo ở bước trước
+            <strong>Kết nối Database:</strong> Bạn có thể nhập thủ công thông tin kết nối database hoặc chọn từ danh sách database đã tạo ở bước trước. Nếu không có database, backend sẽ không hoạt động.
           </li>
         </ul>
       </HintBox>
@@ -604,7 +604,7 @@ export function StepBackend() {
                   )}
                 </div>
                 <div>
-                  <Label htmlFor="tech">Technology <span className="text-destructive">*</span></Label>
+                  <Label htmlFor="tech">Framework <span className="text-destructive">*</span></Label>
                   <Controller
                     name="tech"
                     control={control}
@@ -723,7 +723,7 @@ export function StepBackend() {
               )}
 
               <div>
-                <Label htmlFor="dns">DNS (tùy chọn)</Label>
+                <Label htmlFor="dns">Domain Name</Label>
                 <div className="flex gap-2">
                   <Input
                     id="dns"
@@ -815,7 +815,7 @@ export function StepBackend() {
                     ) : projectDatabases.length > 0 ? (
                       <>
                         <div>
-                          <Label htmlFor="select-db">Chọn Database</Label>
+                          <Label htmlFor="select-db">Chọn Database đã triển khai ở bước trước</Label>
                           <Select
                             value={selectedDbId}
                             onValueChange={(value) => {

@@ -267,12 +267,12 @@ export function StepDatabase() {
         <ul className="list-disc list-inside space-y-1 text-sm">
           <li>Chọn loại database: MySQL hoặc MongoDB</li>
           <li>
-            Hệ thống sẽ tự động tạo và quản lý database (chỉ thao tác qua ứng dụng, không cấp quyền đăng nhập DB)
+            Hệ thống sẽ tự động tạo và quản lý database
           </li>
           <li>
             Upload file ZIP: Chỉ nhận tệp .zip. Khi giải nén, tên thư mục gốc phải trùng với tên database
           </li>
-          <li>Ví dụ cấu trúc: <code className="bg-muted px-1 rounded">my-database/schema.sql</code></li>
+          <li>Ví dụ cấu trúc: <code className="bg-muted px-1 rounded">my-database.zip (chứa duy nhất 1 file my-database.sql)</code></li>
         </ul>
       </HintBox>
 
@@ -441,7 +441,7 @@ export function StepDatabase() {
               )}
               <div>
                 <Label htmlFor="name">
-                  Tên Database <span className="text-destructive">*</span>
+                  Tên Dự Án Database <span className="text-destructive">*</span>
                 </Label>
                 <Input
                   id="name"
@@ -489,7 +489,7 @@ export function StepDatabase() {
                     Thông tin Database của hệ thống
                   </Label>
                   <p className="text-xs text-muted-foreground mb-3">
-                    Nhập thông tin database (tùy chọn cho hệ thống tự quản lý)
+                    Nhập thông tin database của bạn muốn tạo
                   </p>
                 </div>
                 <div className="space-y-4">
@@ -549,7 +549,7 @@ export function StepDatabase() {
 
               {/* Upload ZIP */}
               <div>
-                <Label>Upload file ZIP (tùy chọn)</Label>
+                <Label>Upload file ZIP (nếu không có file SQL, hệ thống sẽ tạo database rỗng với tên mà bạn nhập)</Label>
                 <div
                   className={`mt-2 border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
                     isDeploying ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-muted"

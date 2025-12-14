@@ -134,184 +134,182 @@ export function StepSummary() {
       {/* Thông tin project */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>{projectDetail.projectName}</CardTitle>
-              {projectDetail.description && (
-                <CardDescription className="mt-1">{projectDetail.description}</CardDescription>
-              )}
-            </div>
-            {getStatusBadge(projectDetail.status)}
-          </div>
+          <CardTitle>Thông tin dự án</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2">
-          <div className="grid grid-cols-2 gap-4 text-sm">
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div>
+              <Label className="text-muted-foreground">Tên dự án:</Label>
+              <p className="font-medium mt-1">{projectDetail.projectName}</p>
+            </div>
             <div>
               <Label className="text-muted-foreground">Ngày tạo:</Label>
-              <p className="font-medium">{formatDate(projectDetail.createdAt)}</p>
-            </div>
-            <div>
-              <Label className="text-muted-foreground">Cập nhật lần cuối:</Label>
-              <p className="font-medium">{formatDate(projectDetail.updatedAt)}</p>
+              <p className="font-medium mt-1">{formatDate(projectDetail.createdAt)}</p>
             </div>
           </div>
+          {projectDetail.description && (
+            <div className="text-sm">
+              <Label className="text-muted-foreground">Mô tả dự án:</Label>
+              <p className="font-medium mt-1">{projectDetail.description}</p>
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Tổng hợp */}
-      <div className="space-y-6">
+      {/* Tổng hợp - Grid Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Databases */}
-        <Card>
-          <CardHeader>
-            <CardTitle>
+        <Card className="flex flex-col">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">
               Databases ({projectDetail.databases?.length || 0})
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex-1 overflow-y-auto max-h-[600px] pr-2">
             {projectDetail.databases && projectDetail.databases.length > 0 ? (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {projectDetail.databases.map((db) => (
-                  <div key={db.id} className="p-4 bg-muted rounded-lg space-y-2">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="font-medium">{db.projectName}</div>
+                  <div key={db.id} className="p-3 bg-muted rounded-lg space-y-1.5 border border-border/50">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm truncate">{db.projectName}</div>
                         {db.description && (
-                          <p className="text-sm text-muted-foreground mt-1">{db.description}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{db.description}</p>
                         )}
                       </div>
-                      {getStatusBadge(db.status)}
+                      <div className="flex-shrink-0">{getStatusBadge(db.status)}</div>
                     </div>
-                    <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
+                    <div className="space-y-1 text-xs text-muted-foreground">
                       <div>
                         <span className="font-medium">Loại:</span>{" "}
                         {db.databaseType === "MYSQL" ? "MySQL" : db.databaseType === "MONGODB" ? "MongoDB" : db.databaseType}
                       </div>
                       {db.databaseIp && (
-                        <div>
+                        <div className="truncate">
                           <span className="font-medium">IP:</span> {db.databaseIp}
                           {db.databasePort && `:${db.databasePort}`}
                         </div>
                       )}
                       {db.databaseName && (
-                        <div>
-                          <span className="font-medium">Database:</span> {db.databaseName}
+                        <div className="truncate">
+                          <span className="font-medium">DB:</span> {db.databaseName}
                         </div>
                       )}
                       {db.databaseUsername && (
-                        <div>
-                          <span className="font-medium">Username:</span> {db.databaseUsername}
+                        <div className="truncate">
+                          <span className="font-medium">User:</span> {db.databaseUsername}
                         </div>
                       )}
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      Tạo lúc: {formatDate(db.createdAt)}
+                    <div className="text-[10px] text-muted-foreground pt-0.5">
+                      {formatDate(db.createdAt)}
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">Chưa có database nào</p>
+              <p className="text-sm text-muted-foreground text-center py-4">Chưa có database nào</p>
             )}
           </CardContent>
         </Card>
 
         {/* Backends */}
-        <Card>
-          <CardHeader>
-            <CardTitle>
+        <Card className="flex flex-col">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">
               Backends ({projectDetail.backends?.length || 0})
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex-1 overflow-y-auto max-h-[600px] pr-2">
             {projectDetail.backends && projectDetail.backends.length > 0 ? (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {projectDetail.backends.map((be) => (
-                  <div key={be.id} className="p-4 bg-muted rounded-lg space-y-2">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="font-medium">{be.projectName}</div>
+                  <div key={be.id} className="p-3 bg-muted rounded-lg space-y-1.5 border border-border/50">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm truncate">{be.projectName}</div>
                         {be.description && (
-                          <p className="text-sm text-muted-foreground mt-1">{be.description}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{be.description}</p>
                         )}
                       </div>
-                      {getStatusBadge(be.status)}
+                      <div className="flex-shrink-0">{getStatusBadge(be.status)}</div>
                     </div>
-                    <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
+                    <div className="space-y-1 text-xs text-muted-foreground">
                       <div>
                         <span className="font-medium">Framework:</span>{" "}
                         {be.frameworkType === "SPRINGBOOT" ? "Spring Boot" : be.frameworkType === "NODEJS" ? "Node.js" : be.frameworkType}
                       </div>
                       <div>
-                        <span className="font-medium">Deployment:</span>{" "}
-                        {be.deploymentType === "DOCKER" ? "Docker Image" : be.deploymentType === "FILE" ? "File ZIP" : be.deploymentType}
+                        <span className="font-medium">Deploy:</span>{" "}
+                        {be.deploymentType === "DOCKER" ? "Docker" : be.deploymentType === "FILE" ? "ZIP" : be.deploymentType}
                       </div>
                       {be.domainNameSystem && (
-                        <div>
+                        <div className="truncate">
                           <span className="font-medium">DNS:</span> {be.domainNameSystem}
                         </div>
                       )}
                       {be.databaseIp && be.databasePort && (
-                        <div>
-                          <span className="font-medium">Database:</span> {be.databaseIp}:{be.databasePort}
+                        <div className="truncate">
+                          <span className="font-medium">DB:</span> {be.databaseIp}:{be.databasePort}
                         </div>
                       )}
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      Tạo lúc: {formatDate(be.createdAt)}
+                    <div className="text-[10px] text-muted-foreground pt-0.5">
+                      {formatDate(be.createdAt)}
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">Chưa có backend nào</p>
+              <p className="text-sm text-muted-foreground text-center py-4">Chưa có backend nào</p>
             )}
           </CardContent>
         </Card>
 
         {/* Frontends */}
-        <Card>
-          <CardHeader>
-            <CardTitle>
+        <Card className="flex flex-col">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">
               Frontends ({projectDetail.frontends?.length || 0})
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex-1 overflow-y-auto max-h-[600px] pr-2">
             {projectDetail.frontends && projectDetail.frontends.length > 0 ? (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {projectDetail.frontends.map((fe) => (
-                  <div key={fe.id} className="p-4 bg-muted rounded-lg space-y-2">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="font-medium">{fe.projectName}</div>
+                  <div key={fe.id} className="p-3 bg-muted rounded-lg space-y-1.5 border border-border/50">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm truncate">{fe.projectName}</div>
                         {fe.description && (
-                          <p className="text-sm text-muted-foreground mt-1">{fe.description}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{fe.description}</p>
                         )}
                       </div>
-                      {getStatusBadge(fe.status)}
+                      <div className="flex-shrink-0">{getStatusBadge(fe.status)}</div>
                     </div>
-                    <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
+                    <div className="space-y-1 text-xs text-muted-foreground">
                       <div>
                         <span className="font-medium">Framework:</span>{" "}
                         {fe.frameworkType === "REACT" ? "React" : fe.frameworkType === "VUE" ? "Vue" : fe.frameworkType === "ANGULAR" ? "Angular" : fe.frameworkType}
                       </div>
                       <div>
-                        <span className="font-medium">Deployment:</span>{" "}
-                        {fe.deploymentType === "DOCKER" ? "Docker Image" : fe.deploymentType === "FILE" ? "File ZIP" : fe.deploymentType}
+                        <span className="font-medium">Deploy:</span>{" "}
+                        {fe.deploymentType === "DOCKER" ? "Docker" : fe.deploymentType === "FILE" ? "ZIP" : fe.deploymentType}
                       </div>
                       {fe.domainNameSystem && (
-                        <div>
+                        <div className="truncate">
                           <span className="font-medium">DNS:</span> {fe.domainNameSystem}
                         </div>
                       )}
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      Tạo lúc: {formatDate(fe.createdAt)}
+                    <div className="text-[10px] text-muted-foreground pt-0.5">
+                      {formatDate(fe.createdAt)}
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">Chưa có frontend nào</p>
+              <p className="text-sm text-muted-foreground text-center py-4">Chưa có frontend nào</p>
             )}
           </CardContent>
         </Card>
@@ -320,7 +318,7 @@ export function StepSummary() {
       {/* Action buttons */}
       <div className="flex justify-end">
         <Button onClick={() => navigate(`/projects/${projectDetail.id}`)}>
-          Xem chi tiết project
+          Xem chi tiết dự án
         </Button>
       </div>
     </div>

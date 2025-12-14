@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import { useParams, useNavigate } from "react-router-dom"
-import { ArrowLeft, Copy, CheckCircle2, ExternalLink, MoreVertical, Play, Pause, Trash2, Eye, EyeOff, Plus, Upload, X, Loader2, SlidersHorizontal } from "lucide-react"
+import { ArrowLeft, Copy, CheckCircle2, ExternalLink, MoreVertical, Play, Pause, Trash2, Eye, EyeOff, Plus, Upload, X, Loader2, SlidersHorizontal, Database, Server, Globe, Clock, FolderOpen, FileText, Calendar, Network, HardDrive, User, Key, Check, Package, Code } from "lucide-react"
 import { motion } from "framer-motion"
 import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -920,6 +920,9 @@ export function ProjectDetail() {
   const [dnsStatusBe, setDnsStatusBe] = useState<"idle" | "valid" | "invalid">("idle")
   const [dnsMessageBe, setDnsMessageBe] = useState("")
   const [isCheckingDnsBe, setIsCheckingDnsBe] = useState(false)
+  const [dbConnectionModeBe, setDbConnectionModeBe] = useState<"manual" | "select">("manual")
+  const [selectedDbIdBe, setSelectedDbIdBe] = useState("")
+  const [loadingDatabasesBe, setLoadingDatabasesBe] = useState(false)
 
   // Validate Docker image
   const validateDockerBe = () => {
@@ -974,6 +977,53 @@ export function ProjectDetail() {
       toast.error(message)
     } finally {
       setIsCheckingDnsBe(false)
+    }
+  }
+
+  // Khi chọn database từ danh sách, tự động điền các trường
+  const handleSelectDatabaseBe = (dbId: string) => {
+    const selectedDb = projectDatabases.find((db) => String(db.id) === dbId)
+    if (selectedDb) {
+      setSelectedDbIdBe(dbId)
+      // Điền thông tin từ database đã chọn
+      if (selectedDb.databaseName) {
+        setValueBe("dbName", selectedDb.databaseName)
+      }
+      if (selectedDb.databaseIp) {
+        setValueBe("dbIp", selectedDb.databaseIp)
+      }
+      if (selectedDb.databasePort) {
+        setValueBe("dbPort", String(selectedDb.databasePort))
+      }
+      if (selectedDb.databaseUsername) {
+        setValueBe("dbUsername", selectedDb.databaseUsername)
+      }
+      if (selectedDb.databasePassword) {
+        setValueBe("dbPassword", selectedDb.databasePassword)
+      }
+    }
+  }
+
+  // Khi chuyển sang chế độ nhập thủ công, xóa selection
+  const handleModeChangeBe = (mode: "manual" | "select") => {
+    setDbConnectionModeBe(mode)
+    if (mode === "manual") {
+      setSelectedDbIdBe("")
+    } else if (mode === "select") {
+      // Load databases từ API khi chọn mode "select"
+      if (id) {
+        setLoadingDatabasesBe(true)
+        getProjectDatabases(id)
+          .then((response) => {
+            setProjectDatabases(response.databases || [])
+          })
+          .catch((err) => {
+            console.error("Lỗi load databases:", err)
+          })
+          .finally(() => {
+            setLoadingDatabasesBe(false)
+          })
+      }
     }
   }
 
@@ -1282,27 +1332,81 @@ export function ProjectDetail() {
             </Button>
           </div>
 
-          <Card>
-            <CardHeader>
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <CardTitle className="text-3xl mb-2">
-                    {projectBasicInfo?.name || displayProject.name}
-                  </CardTitle>
-                  {(projectBasicInfo?.description || displayProject.description) && (
-                    <CardDescription className="mb-4">
-                      {projectBasicInfo?.description || displayProject.description}
-                    </CardDescription>
-                  )}
-                  <span className="text-sm text-muted-foreground">
-                    Ngày tạo:{" "}
-                    {projectBasicInfo?.createdAt
-                      ? new Date(projectBasicInfo.createdAt).toLocaleString("vi-VN")
-                      : new Date(displayProject.createdAt ?? displayProject.updatedAt).toLocaleString("vi-VN")}
-                  </span>
+          <Card className="overflow-hidden">
+            <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 border-b">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-primary/10">
+                  <FolderOpen className="w-5 h-5 text-primary" />
                 </div>
+                <CardTitle className="text-xl">Thông tin dự án</CardTitle>
               </div>
             </CardHeader>
+            <CardContent className="p-6">
+              <div className="space-y-6">
+                {/* Tên dự án */}
+                <div className="flex items-start gap-4 p-4 rounded-lg bg-muted/50 border border-border/50 hover:bg-muted/70 transition-colors">
+                  <div className="p-2 rounded-md bg-blue-100 dark:bg-blue-950/30 flex-shrink-0">
+                    <FolderOpen className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
+                      Tên dự án
+                    </Label>
+                    <p className="text-base font-semibold text-foreground break-words">
+                      {projectBasicInfo?.name || displayProject.name}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Mô tả dự án */}
+                {(projectBasicInfo?.description || displayProject.description) && (
+                  <div className="flex items-start gap-4 p-4 rounded-lg bg-muted/50 border border-border/50 hover:bg-muted/70 transition-colors">
+                    <div className="p-2 rounded-md bg-purple-100 dark:bg-purple-950/30 flex-shrink-0">
+                      <FileText className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
+                        Mô tả dự án
+                      </Label>
+                      <p className="text-sm text-foreground leading-relaxed break-words whitespace-pre-wrap">
+                        {projectBasicInfo?.description || displayProject.description}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Ngày tạo */}
+                <div className="flex items-start gap-4 p-4 rounded-lg bg-muted/50 border border-border/50 hover:bg-muted/70 transition-colors">
+                  <div className="p-2 rounded-md bg-green-100 dark:bg-green-950/30 flex-shrink-0">
+                    <Calendar className="w-5 h-5 text-green-600 dark:text-green-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
+                      Ngày tạo
+                    </Label>
+                    <p className="text-sm font-medium text-foreground">
+                      {projectBasicInfo?.createdAt
+                        ? new Date(projectBasicInfo.createdAt).toLocaleString("vi-VN", {
+                            weekday: "long",
+                            year: "numeric",
+                            month: "long",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })
+                        : new Date(displayProject.createdAt ?? displayProject.updatedAt).toLocaleString("vi-VN", {
+                            weekday: "long",
+                            year: "numeric",
+                            month: "long",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
           </Card>
         </div>
 
@@ -1389,7 +1493,17 @@ export function ProjectDetail() {
               <TabsContent value="databases" className="p-6">
                 {/* Header với nút thêm */}
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-lg font-semibold">Databases</h3>
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-950/30">
+                      <Database className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-semibold">Databases</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Quản lý và theo dõi các cơ sở dữ liệu của dự án
+                      </p>
+                    </div>
+                  </div>
                   <Button onClick={() => setShowAddDatabase(true)}>
                     <Plus className="w-4 h-4 mr-2" />
                     Thêm Database
@@ -1398,26 +1512,41 @@ export function ProjectDetail() {
 
                 {/* Thống kê Databases */}
                 {stats && (
-                  <Card className="mb-6">
-                    <CardContent className="p-4">
-                      <div className="grid grid-cols-3 gap-4 text-center">
-                        <div>
-                          <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                            {stats.databases.total}
+                  <Card className="mb-6 border-border/50 shadow-sm">
+                    <CardContent className="p-5">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="flex items-center gap-4 p-4 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200/50 dark:border-blue-900/50">
+                          <div className="p-3 rounded-lg bg-blue-100 dark:bg-blue-950/30">
+                            <Database className="w-6 h-6 text-blue-600 dark:text-blue-400" />
                           </div>
-                          <div className="text-sm text-muted-foreground mt-1">Tổng số</div>
+                          <div>
+                            <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">
+                              {stats.databases.total}
+                            </div>
+                            <div className="text-sm text-muted-foreground mt-0.5">Tổng số</div>
+                          </div>
                         </div>
-                        <div>
-                          <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                            {stats.databases.running}
+                        <div className="flex items-center gap-4 p-4 rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200/50 dark:border-green-900/50">
+                          <div className="p-3 rounded-lg bg-green-100 dark:bg-green-950/30">
+                            <Check className="w-6 h-6 text-green-600 dark:text-green-400" />
                           </div>
-                          <div className="text-sm text-muted-foreground mt-1">Đang chạy</div>
+                          <div>
+                            <div className="text-2xl font-bold text-green-700 dark:text-green-300">
+                              {stats.databases.running}
+                            </div>
+                            <div className="text-sm text-muted-foreground mt-0.5">Đang chạy</div>
+                          </div>
                         </div>
-                        <div>
-                          <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
-                            {stats.databases.paused}
+                        <div className="flex items-center gap-4 p-4 rounded-lg bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200/50 dark:border-yellow-900/50">
+                          <div className="p-3 rounded-lg bg-yellow-100 dark:bg-yellow-950/30">
+                            <Pause className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
                           </div>
-                          <div className="text-sm text-muted-foreground mt-1">Đang dừng</div>
+                          <div>
+                            <div className="text-2xl font-bold text-yellow-700 dark:text-yellow-300">
+                              {stats.databases.paused}
+                            </div>
+                            <div className="text-sm text-muted-foreground mt-0.5">Đang dừng</div>
+                          </div>
                         </div>
                       </div>
                     </CardContent>
@@ -1444,174 +1573,289 @@ export function ProjectDetail() {
                       const dbStatusKey = rawDbStatus ? rawDbStatus.toString().toLowerCase() : ""
 
                       return (
-                        <Card key={dbId}>
-                          <CardHeader>
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1">
-                                <CardTitle className="text-lg">{dbName}</CardTitle>
-                                {dbDescription && (
-                                  <CardDescription className="mt-1">
-                                    {dbDescription}
-                                  </CardDescription>
-                                )}
-                                <CardDescription className="mt-1">
-                                  {dbType === "MYSQL" || dbType === "mysql" ? "MySQL" : dbType === "MONGODB" || dbType === "mongodb" ? "MongoDB" : dbType}
-                                </CardDescription>
+                        <motion.div
+                          key={dbId}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.2 }}
+                        >
+                          <Card className="hover:shadow-lg transition-all duration-300 border-border/50 h-full flex flex-col">
+                            <CardHeader className="pb-4 border-b border-border/50 bg-gradient-to-br from-blue-50/50 to-transparent dark:from-blue-950/20">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex items-start gap-3 flex-1 min-w-0">
+                                  <div className={`p-2.5 rounded-lg flex-shrink-0 ${
+                                    dbType === "MYSQL" || dbType === "mysql" 
+                                      ? "bg-orange-100 dark:bg-orange-950/30" 
+                                      : "bg-green-100 dark:bg-green-950/30"
+                                  }`}>
+                                    <Database className={`w-5 h-5 ${
+                                      dbType === "MYSQL" || dbType === "mysql"
+                                        ? "text-orange-600 dark:text-orange-400"
+                                        : "text-green-600 dark:text-green-400"
+                                    }`} />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <CardTitle className="text-lg font-semibold mb-1 truncate">{dbName}</CardTitle>
+                                    {dbDescription && (
+                                      <CardDescription className="text-xs line-clamp-1 mb-2">
+                                        {dbDescription}
+                                      </CardDescription>
+                                    )}
+                                    <Badge 
+                                      variant="outline" 
+                                      className={`text-xs ${
+                                        dbType === "MYSQL" || dbType === "mysql"
+                                          ? "border-orange-300 dark:border-orange-800 text-orange-700 dark:text-orange-300 bg-orange-50 dark:bg-orange-950/30"
+                                          : "border-green-300 dark:border-green-800 text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-950/30"
+                                      }`}
+                                    >
+                                      {dbType === "MYSQL" || dbType === "mysql" ? "MySQL" : dbType === "MONGODB" || dbType === "mongodb" ? "MongoDB" : dbType}
+                                    </Badge>
+                                  </div>
+                                </div>
+                                <Badge variant={dbStatus.variant} className="flex-shrink-0">
+                                  {dbStatus.label}
+                                </Badge>
                               </div>
-                              <Badge variant={dbStatus.variant}>
-                                {dbStatus.label}
-                              </Badge>
-                            </div>
-                          </CardHeader>
-                          <CardContent>
-                            <div className="space-y-3">
-                              {/* IP, Port, Database Name - chung 1 hàng */}
-                              {(dbIp || dbPort || dbDatabaseName) && (
-                                <div className="grid grid-cols-3 gap-4">
-                                  {/* IP */}
-                                  {dbIp && (
-                                    <div>
-                                      <span className="text-xs font-medium text-muted-foreground uppercase">
-                                        IP
-                                      </span>
-                                      <p className="text-sm font-mono mt-1">{dbIp}</p>
-                                    </div>
-                                  )}
-                                  
-                                  {/* Port */}
-                                  {dbPort && (
-                                    <div>
-                                      <span className="text-xs font-medium text-muted-foreground uppercase">
-                                        Port
-                                      </span>
-                                      <p className="text-sm font-mono mt-1">{dbPort}</p>
-                                    </div>
-                                  )}
-
-                                  {/* Database Name */}
-                                  {dbDatabaseName && (
-                                    <div>
-                                      <span className="text-xs font-medium text-muted-foreground uppercase">
-                                        Database Name
-                                      </span>
-                                      <p className="text-sm font-mono mt-1">{dbDatabaseName}</p>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-
-                              {/* Username và Password - chung 1 hàng */}
-                              {(dbUsername || dbPassword) && (
-                                <div className="grid grid-cols-2 gap-4">
-                                  {/* Username */}
-                                  {dbUsername && (
-                                    <div>
-                                      <span className="text-xs font-medium text-muted-foreground uppercase">
-                                        Username
-                                      </span>
-                                      <p className="text-sm font-mono mt-1">{dbUsername}</p>
-                                    </div>
-                                  )}
-
-                                  {/* Password với icon toggle */}
-                                  {dbPassword && (
-                                    <div>
-                                      <span className="text-xs font-medium text-muted-foreground uppercase">
-                                        Password
-                                      </span>
-                                      <div className="relative mt-1">
-                                        <p className="text-sm font-mono pr-8">
-                                          {showPasswords[dbId] ? dbPassword : "••••••••"}
-                                        </p>
-                                        <button
-                                          type="button"
-                                          onClick={() => setShowPasswords(prev => ({ ...prev, [dbId]: !prev[dbId] }))}
-                                          className="absolute right-0 top-0 p-1 text-muted-foreground hover:text-foreground transition-colors"
-                                          aria-label={showPasswords[dbId] ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
-                                        >
-                                          {showPasswords[dbId] ? (
-                                            <EyeOff className="w-4 h-4" />
-                                          ) : (
-                                            <Eye className="w-4 h-4" />
-                                          )}
-                                        </button>
+                            </CardHeader>
+                            <CardContent className="p-5 flex-1">
+                              <div className="space-y-4">
+                                {/* IP, Port, Database Name */}
+                                {(dbIp || dbPort || dbDatabaseName) && (
+                                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    {/* IP */}
+                                    {dbIp && (
+                                      <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 border border-border/50">
+                                        <Network className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                                        <div className="flex-1 min-w-0">
+                                          <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">
+                                            IP Address
+                                          </Label>
+                                          <div className="flex items-center gap-2">
+                                            <p className="text-sm font-mono truncate">{dbIp}</p>
+                                            <Button
+                                              variant="ghost"
+                                              size="icon"
+                                              className="h-6 w-6 flex-shrink-0"
+                                              onClick={() => copyToClipboard(dbIp)}
+                                              title="Sao chép IP"
+                                            >
+                                              <Copy className="w-3 h-3" />
+                                            </Button>
+                                          </div>
+                                        </div>
                                       </div>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                            </div>
+                                    )}
+                                    
+                                    {/* Port */}
+                                    {dbPort && (
+                                      <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 border border-border/50">
+                                        <Network className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                                        <div className="flex-1 min-w-0">
+                                          <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">
+                                            Port
+                                          </Label>
+                                          <p className="text-sm font-mono">{dbPort}</p>
+                                        </div>
+                                      </div>
+                                    )}
 
-                            <div className="flex justify-end mt-4">
-                              <DropdownMenu
-                                trigger={
-                                  <Button variant="outline" size="sm">
-                                    <MoreVertical className="w-4 h-4 mr-2" />
-                                    Thao tác
-                                  </Button>
-                                }
-                              >
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    if (dbApiId !== null) {
-                                      handleDatabaseStart(dbApiId, dbName)
-                                    } else {
-                                      handleStart(dbName, "database")
-                                    }
-                                  }}
-                                  disabled={deploying || ["running", "deployed"].includes(dbStatusKey)}
-                                >
-                                  <Play className="w-4 h-4 mr-2" />
-                                  Chạy
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    if (dbApiId !== null) {
-                                      handleDatabaseStop(dbApiId, dbName)
-                                    } else {
-                                      handlePause(dbName, "database")
-                                    }
-                                  }}
-                                  disabled={
-                                    deploying ||
-                                    ["paused", "stopped"].includes(dbStatusKey) ||
-                                    ["pending", "building", "deploying"].includes(dbStatusKey)
+                                    {/* Database Name */}
+                                    {dbDatabaseName && (
+                                      <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 border border-border/50">
+                                        <HardDrive className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                                        <div className="flex-1 min-w-0">
+                                          <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">
+                                            Database
+                                          </Label>
+                                          <div className="flex items-center gap-2">
+                                            <p className="text-sm font-mono truncate">{dbDatabaseName}</p>
+                                            <Button
+                                              variant="ghost"
+                                              size="icon"
+                                              className="h-6 w-6 flex-shrink-0"
+                                              onClick={() => copyToClipboard(dbDatabaseName)}
+                                              title="Sao chép tên database"
+                                            >
+                                              <Copy className="w-3 h-3" />
+                                            </Button>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* Username và Password */}
+                                {(dbUsername || dbPassword) && (
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    {/* Username */}
+                                    {dbUsername && (
+                                      <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 border border-border/50">
+                                        <User className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                                        <div className="flex-1 min-w-0">
+                                          <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">
+                                            Username
+                                          </Label>
+                                          <div className="flex items-center gap-2">
+                                            <p className="text-sm font-mono truncate">{dbUsername}</p>
+                                            <Button
+                                              variant="ghost"
+                                              size="icon"
+                                              className="h-6 w-6 flex-shrink-0"
+                                              onClick={() => copyToClipboard(dbUsername)}
+                                              title="Sao chép username"
+                                            >
+                                              <Copy className="w-3 h-3" />
+                                            </Button>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* Password với icon toggle */}
+                                    {dbPassword && (
+                                      <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 border border-border/50">
+                                        <Key className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                                        <div className="flex-1 min-w-0">
+                                          <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">
+                                            Password
+                                          </Label>
+                                          <div className="flex items-center gap-2">
+                                            <p className="text-sm font-mono flex-1 truncate">
+                                              {showPasswords[dbId] ? dbPassword : "••••••••"}
+                                            </p>
+                                            <div className="flex items-center gap-1 flex-shrink-0">
+                                              <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-6 w-6"
+                                                onClick={() => {
+                                                  if (showPasswords[dbId]) {
+                                                    copyToClipboard(dbPassword)
+                                                  } else {
+                                                    setShowPasswords(prev => ({ ...prev, [dbId]: !prev[dbId] }))
+                                                  }
+                                                }}
+                                                title={showPasswords[dbId] ? "Sao chép password" : "Hiện mật khẩu"}
+                                              >
+                                                {showPasswords[dbId] ? (
+                                                  <Copy className="w-3 h-3" />
+                                                ) : (
+                                                  <Eye className="w-3 h-3" />
+                                                )}
+                                              </Button>
+                                              {showPasswords[dbId] && (
+                                                <Button
+                                                  variant="ghost"
+                                                  size="icon"
+                                                  className="h-6 w-6"
+                                                  onClick={() => setShowPasswords(prev => ({ ...prev, [dbId]: !prev[dbId] }))}
+                                                  title="Ẩn mật khẩu"
+                                                >
+                                                  <EyeOff className="w-3 h-3" />
+                                                </Button>
+                                              )}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="flex justify-end mt-5 pt-4 border-t border-border/50">
+                                <DropdownMenu
+                                  trigger={
+                                    <Button variant="outline" size="sm">
+                                      <MoreVertical className="w-4 h-4 mr-2" />
+                                      Thao tác
+                                    </Button>
                                   }
                                 >
-                                  <Pause className="w-4 h-4 mr-2" />
-                                  Tạm dừng
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    if (dbApiId !== null) {
-                                      handleDelete(dbName, "database", dbApiId)
-                                    } else {
-                                      handleDelete(dbName, "database")
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      if (dbApiId !== null) {
+                                        handleDatabaseStart(dbApiId, dbName)
+                                      } else {
+                                        handleStart(dbName, "database")
+                                      }
+                                    }}
+                                    disabled={deploying || ["running", "deployed"].includes(dbStatusKey)}
+                                  >
+                                    <Play className="w-4 h-4 mr-2" />
+                                    Chạy
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      if (dbApiId !== null) {
+                                        handleDatabaseStop(dbApiId, dbName)
+                                      } else {
+                                        handlePause(dbName, "database")
+                                      }
+                                    }}
+                                    disabled={
+                                      deploying ||
+                                      ["paused", "stopped"].includes(dbStatusKey) ||
+                                      ["pending", "building", "deploying"].includes(dbStatusKey)
                                     }
-                                  }}
-                                  className="text-destructive focus:text-destructive"
-                                >
-                                  <Trash2 className="w-4 h-4 mr-2" />
-                                  Xóa
-                                </DropdownMenuItem>
-                              </DropdownMenu>
-                            </div>
-                          </CardContent>
-                        </Card>
+                                  >
+                                    <Pause className="w-4 h-4 mr-2" />
+                                    Tạm dừng
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      if (dbApiId !== null) {
+                                        handleDelete(dbName, "database", dbApiId)
+                                      } else {
+                                        handleDelete(dbName, "database")
+                                      }
+                                    }}
+                                    className="text-destructive focus:text-destructive"
+                                  >
+                                    <Trash2 className="w-4 h-4 mr-2" />
+                                    Xóa
+                                  </DropdownMenuItem>
+                                </DropdownMenu>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        </motion.div>
                       )
                     })}
                   </div>
                 ) : (
-                  <p className="text-center text-muted-foreground py-12">
-                    Chưa có database nào
-                  </p>
+                  <div className="text-center py-16">
+                    <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-blue-100 dark:bg-blue-950/30 mb-4">
+                      <Database className="w-10 h-10 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <h3 className="text-lg font-semibold mb-1">Chưa có database nào</h3>
+                    <p className="text-sm text-muted-foreground mb-6">
+                      Bắt đầu bằng cách thêm database mới cho dự án của bạn
+                    </p>
+                    <Button onClick={() => setShowAddDatabase(true)}>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Thêm Database đầu tiên
+                    </Button>
+                  </div>
                 )}
               </TabsContent>
 
               <TabsContent value="backends" className="p-6">
                 {/* Header với nút thêm */}
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-lg font-semibold">Backends</h3>
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-950/30">
+                      <Server className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-semibold">Backends</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Quản lý và triển khai các backend services của dự án
+                      </p>
+                    </div>
+                  </div>
                   <Button onClick={() => setShowAddBackend(true)}>
                     <Plus className="w-4 h-4 mr-2" />
                     Thêm Backend
@@ -1620,26 +1864,41 @@ export function ProjectDetail() {
 
                 {/* Thống kê Backends */}
                 {stats && (
-                  <Card className="mb-6">
-                    <CardContent className="p-4">
-                      <div className="grid grid-cols-3 gap-4 text-center">
-                        <div>
-                          <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                            {stats.backends.total}
+                  <Card className="mb-6 border-border/50 shadow-sm">
+                    <CardContent className="p-5">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="flex items-center gap-4 p-4 rounded-lg bg-purple-50 dark:bg-purple-950/20 border border-purple-200/50 dark:border-purple-900/50">
+                          <div className="p-3 rounded-lg bg-purple-100 dark:bg-purple-950/30">
+                            <Server className="w-6 h-6 text-purple-600 dark:text-purple-400" />
                           </div>
-                          <div className="text-sm text-muted-foreground mt-1">Tổng số</div>
+                          <div>
+                            <div className="text-2xl font-bold text-purple-700 dark:text-purple-300">
+                              {stats.backends.total}
+                            </div>
+                            <div className="text-sm text-muted-foreground mt-0.5">Tổng số</div>
+                          </div>
                         </div>
-                        <div>
-                          <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                            {stats.backends.running}
+                        <div className="flex items-center gap-4 p-4 rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200/50 dark:border-green-900/50">
+                          <div className="p-3 rounded-lg bg-green-100 dark:bg-green-950/30">
+                            <Check className="w-6 h-6 text-green-600 dark:text-green-400" />
                           </div>
-                          <div className="text-sm text-muted-foreground mt-1">Đang chạy</div>
+                          <div>
+                            <div className="text-2xl font-bold text-green-700 dark:text-green-300">
+                              {stats.backends.running}
+                            </div>
+                            <div className="text-sm text-muted-foreground mt-0.5">Đang chạy</div>
+                          </div>
                         </div>
-                        <div>
-                          <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
-                            {stats.backends.paused}
+                        <div className="flex items-center gap-4 p-4 rounded-lg bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200/50 dark:border-yellow-900/50">
+                          <div className="p-3 rounded-lg bg-yellow-100 dark:bg-yellow-950/30">
+                            <Pause className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
                           </div>
-                          <div className="text-sm text-muted-foreground mt-1">Đang dừng</div>
+                          <div>
+                            <div className="text-2xl font-bold text-yellow-700 dark:text-yellow-300">
+                              {stats.backends.paused}
+                            </div>
+                            <div className="text-sm text-muted-foreground mt-0.5">Đang dừng</div>
+                          </div>
                         </div>
                       </div>
                     </CardContent>
@@ -1669,222 +1928,374 @@ export function ProjectDetail() {
                       const beApiId = isApiData ? (be as BackendInfo).id : null
 
                       return (
-                        <Card key={beId}>
-                          <CardHeader>
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1">
-                                <CardTitle className="text-lg">{beName}</CardTitle>
-                                {beDescription && (
-                                  <CardDescription className="mt-1">
-                                    {beDescription}
-                                  </CardDescription>
-                                )}
-                                <CardDescription className="mt-1">
-                                  {beTech === "SPRING" || beTech === "spring" ? "Spring Boot" : beTech === "NODEJS" || beTech === "node" ? "Node.js" : beTech}
-                                </CardDescription>
-                              </div>
-                              <Badge variant={beStatus.variant}>
-                                {beStatus.label}
-                              </Badge>
-                            </div>
-                          </CardHeader>
-                          <CardContent>
-                            <div className="space-y-3">
-                              {/* DNS */}
-                              {beDns && (
-                                <div>
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-xs font-medium text-muted-foreground uppercase">
-                                      DNS
-                                    </span>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-5 w-5"
-                                      onClick={() => copyToClipboard(beDns!)}
-                                      title="Sao chép DNS"
-                                    >
-                                      <Copy className="w-3 h-3" />
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-5 w-5"
-                                      onClick={() => handleCheckDNS(beDns)}
-                                      title="Kiểm tra DNS"
-                                    >
-                                      <CheckCircle2 className="w-3 h-3" />
-                                    </Button>
+                        <motion.div
+                          key={beId}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.2 }}
+                        >
+                          <Card className="hover:shadow-lg transition-all duration-300 border-border/50 h-full flex flex-col">
+                            <CardHeader className="pb-4 border-b border-border/50 bg-gradient-to-br from-purple-50/50 to-transparent dark:from-purple-950/20">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex items-start gap-3 flex-1 min-w-0">
+                                  <div className={`p-2.5 rounded-lg flex-shrink-0 ${
+                                    beTech === "SPRING" || beTech === "spring" 
+                                      ? "bg-green-100 dark:bg-green-950/30" 
+                                      : "bg-blue-100 dark:bg-blue-950/30"
+                                  }`}>
+                                    <Code className={`w-5 h-5 ${
+                                      beTech === "SPRING" || beTech === "spring"
+                                        ? "text-green-600 dark:text-green-400"
+                                        : "text-blue-600 dark:text-blue-400"
+                                    }`} />
                                   </div>
-                                  <p className="text-sm font-mono mt-1">{beDns}</p>
+                                  <div className="flex-1 min-w-0">
+                                    <CardTitle className="text-lg font-semibold mb-1 truncate">{beName}</CardTitle>
+                                    {beDescription && (
+                                      <CardDescription className="text-xs line-clamp-1 mb-2">
+                                        {beDescription}
+                                      </CardDescription>
+                                    )}
+                                    <Badge 
+                                      variant="outline" 
+                                      className={`text-xs ${
+                                        beTech === "SPRING" || beTech === "spring"
+                                          ? "border-green-300 dark:border-green-800 text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-950/30"
+                                          : "border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/30"
+                                      }`}
+                                    >
+                                      {beTech === "SPRING" || beTech === "spring" ? "Spring Boot" : beTech === "NODEJS" || beTech === "node" ? "Node.js" : beTech}
+                                    </Badge>
+                                  </div>
                                 </div>
-                              )}
-
-                              {/* Docker Image */}
-                              {beDockerImage && (
-                                <div>
-                                  <span className="text-xs font-medium text-muted-foreground uppercase">
-                                    Docker Image
-                                  </span>
-                                  <p className="text-sm font-mono mt-1">{beDockerImage}</p>
-                                </div>
-                              )}
-
-                              {/* IP, Port, Database Name - chung 1 hàng (nếu có database connection) */}
-                              {(beDbIp || beDbPort || beDbName) && (
-                                <div className="grid grid-cols-3 gap-4">
-                                  {/* IP */}
-                                  {beDbIp && (
-                                    <div>
-                                      <span className="text-xs font-medium text-muted-foreground uppercase">
-                                        IP
-                                      </span>
-                                      <p className="text-sm font-mono mt-1">{beDbIp}</p>
-                                    </div>
-                                  )}
-                                  
-                                  {/* Port */}
-                                  {beDbPort && (
-                                    <div>
-                                      <span className="text-xs font-medium text-muted-foreground uppercase">
-                                        Port
-                                      </span>
-                                      <p className="text-sm font-mono mt-1">{beDbPort}</p>
-                                    </div>
-                                  )}
-
-                                  {/* Database Name */}
-                                  {beDbName && (
-                                    <div>
-                                      <span className="text-xs font-medium text-muted-foreground uppercase">
-                                        Database Name
-                                      </span>
-                                      <p className="text-sm font-mono mt-1">{beDbName}</p>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-
-                              {/* Username và Password - chung 1 hàng (nếu có database connection) */}
-                              {(beDbUsername || beDbPassword) && (
-                                <div className="grid grid-cols-2 gap-4">
-                                  {/* Username */}
-                                  {beDbUsername && (
-                                    <div>
-                                      <span className="text-xs font-medium text-muted-foreground uppercase">
-                                        Username
-                                      </span>
-                                      <p className="text-sm font-mono mt-1">{beDbUsername}</p>
-                                    </div>
-                                  )}
-
-                                  {/* Password với icon toggle */}
-                                  {beDbPassword && (
-                                    <div>
-                                      <span className="text-xs font-medium text-muted-foreground uppercase">
-                                        Password
-                                      </span>
-                                      <div className="relative mt-1">
-                                        <p className="text-sm font-mono pr-8">
-                                          {showPasswords[beId] ? beDbPassword : "••••••••"}
-                                        </p>
-                                        <button
-                                          type="button"
-                                          onClick={() => setShowPasswords(prev => ({ ...prev, [beId]: !prev[beId] }))}
-                                          className="absolute right-0 top-0 p-1 text-muted-foreground hover:text-foreground transition-colors"
-                                          aria-label={showPasswords[beId] ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
-                                        >
-                                          {showPasswords[beId] ? (
-                                            <EyeOff className="w-4 h-4" />
-                                          ) : (
-                                            <Eye className="w-4 h-4" />
-                                          )}
-                                        </button>
+                                <Badge variant={beStatus.variant} className="flex-shrink-0">
+                                  {beStatus.label}
+                                </Badge>
+                              </div>
+                            </CardHeader>
+                            <CardContent className="p-5 flex-1">
+                              <div className="space-y-4">
+                                {/* DNS */}
+                                {beDns && (
+                                  <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 border border-border/50">
+                                    <Globe className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                                    <div className="flex-1 min-w-0">
+                                      <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">
+                                        Domain Name System (DNS)
+                                      </Label>
+                                      <div className="flex items-center gap-2">
+                                        <p className="text-sm font-mono flex-1 truncate">{beDns}</p>
+                                        <div className="flex items-center gap-1 flex-shrink-0">
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-6 w-6"
+                                            onClick={() => copyToClipboard(beDns!)}
+                                            title="Sao chép DNS"
+                                          >
+                                            <Copy className="w-3 h-3" />
+                                          </Button>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-6 w-6"
+                                            onClick={() => handleCheckDNS(beDns)}
+                                            title="Kiểm tra DNS"
+                                          >
+                                            <CheckCircle2 className="w-3 h-3" />
+                                          </Button>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-6 w-6"
+                                            onClick={() => window.open(`http://${beDns}`, '_blank')}
+                                            title="Mở trong tab mới"
+                                          >
+                                            <ExternalLink className="w-3 h-3" />
+                                          </Button>
+                                        </div>
                                       </div>
                                     </div>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-
-                            <div className="flex justify-end mt-4">
-                              <DropdownMenu
-                                trigger={
-                                  <Button variant="outline" size="sm">
-                                    <MoreVertical className="w-4 h-4 mr-2" />
-                                    Thao tác
-                                  </Button>
-                                }
-                              >
-                                {beApiId !== null && (
-                                  <DropdownMenuItem
-                                    onClick={() => openAdjustBackendModal(backendData)}
-                                  >
-                                    <SlidersHorizontal className="w-4 h-4 mr-2" />
-                                    Điều chỉnh replicas
-                                  </DropdownMenuItem>
+                                  </div>
                                 )}
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    if (beApiId !== null) {
-                                      handleBackendStart(beApiId, beName)
-                                    } else {
-                                      handleStart(beName, "backend")
-                                    }
-                                  }}
-                                  disabled={deploying || ["running", "deployed"].includes(beStatusKey)}
-                                >
-                                  <Play className="w-4 h-4 mr-2" />
-                                  Chạy
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    if (beApiId !== null) {
-                                      handleBackendStop(beApiId, beName)
-                                    } else {
-                                      handlePause(beName, "backend")
-                                    }
-                                  }}
-                                  disabled={
-                                    deploying ||
-                                    ["paused", "stopped"].includes(beStatusKey) ||
-                                    ["pending", "building", "deploying"].includes(beStatusKey)
+
+                                {/* Docker Image */}
+                                {beDockerImage && (
+                                  <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 border border-border/50">
+                                    <Package className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                                    <div className="flex-1 min-w-0">
+                                      <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">
+                                        Docker Image
+                                      </Label>
+                                      <div className="flex items-center gap-2">
+                                        <p className="text-sm font-mono flex-1 truncate">{beDockerImage}</p>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-6 w-6 flex-shrink-0"
+                                          onClick={() => copyToClipboard(beDockerImage)}
+                                          title="Sao chép Docker Image"
+                                        >
+                                          <Copy className="w-3 h-3" />
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Database Connection Info */}
+                                {(beDbIp || beDbPort || beDbName || beDbUsername || beDbPassword) && (
+                                  <div className="space-y-3 pt-2 border-t border-border/50">
+                                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-2">
+                                      Thông tin kết nối Database
+                                    </Label>
+                                    
+                                    {/* IP, Port, Database Name */}
+                                    {(beDbIp || beDbPort || beDbName) && (
+                                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                        {/* IP */}
+                                        {beDbIp && (
+                                          <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 border border-border/50">
+                                            <Network className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                                            <div className="flex-1 min-w-0">
+                                              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">
+                                                IP Address
+                                              </Label>
+                                              <div className="flex items-center gap-2">
+                                                <p className="text-sm font-mono truncate">{beDbIp}</p>
+                                                <Button
+                                                  variant="ghost"
+                                                  size="icon"
+                                                  className="h-6 w-6 flex-shrink-0"
+                                                  onClick={() => copyToClipboard(beDbIp)}
+                                                  title="Sao chép IP"
+                                                >
+                                                  <Copy className="w-3 h-3" />
+                                                </Button>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        )}
+                                        
+                                        {/* Port */}
+                                        {beDbPort && (
+                                          <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 border border-border/50">
+                                            <Network className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                                            <div className="flex-1 min-w-0">
+                                              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">
+                                                Port
+                                              </Label>
+                                              <p className="text-sm font-mono">{beDbPort}</p>
+                                            </div>
+                                          </div>
+                                        )}
+
+                                        {/* Database Name */}
+                                        {beDbName && (
+                                          <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 border border-border/50">
+                                            <Database className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                                            <div className="flex-1 min-w-0">
+                                              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">
+                                                Database
+                                              </Label>
+                                              <div className="flex items-center gap-2">
+                                                <p className="text-sm font-mono truncate">{beDbName}</p>
+                                                <Button
+                                                  variant="ghost"
+                                                  size="icon"
+                                                  className="h-6 w-6 flex-shrink-0"
+                                                  onClick={() => copyToClipboard(beDbName)}
+                                                  title="Sao chép tên database"
+                                                >
+                                                  <Copy className="w-3 h-3" />
+                                                </Button>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+
+                                    {/* Username và Password */}
+                                    {(beDbUsername || beDbPassword) && (
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        {/* Username */}
+                                        {beDbUsername && (
+                                          <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 border border-border/50">
+                                            <User className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                                            <div className="flex-1 min-w-0">
+                                              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">
+                                                Username
+                                              </Label>
+                                              <div className="flex items-center gap-2">
+                                                <p className="text-sm font-mono truncate">{beDbUsername}</p>
+                                                <Button
+                                                  variant="ghost"
+                                                  size="icon"
+                                                  className="h-6 w-6 flex-shrink-0"
+                                                  onClick={() => copyToClipboard(beDbUsername)}
+                                                  title="Sao chép username"
+                                                >
+                                                  <Copy className="w-3 h-3" />
+                                                </Button>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        )}
+
+                                        {/* Password với icon toggle */}
+                                        {beDbPassword && (
+                                          <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 border border-border/50">
+                                            <Key className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                                            <div className="flex-1 min-w-0">
+                                              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">
+                                                Password
+                                              </Label>
+                                              <div className="flex items-center gap-2">
+                                                <p className="text-sm font-mono flex-1 truncate">
+                                                  {showPasswords[beId] ? beDbPassword : "••••••••"}
+                                                </p>
+                                                <div className="flex items-center gap-1 flex-shrink-0">
+                                                  <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-6 w-6"
+                                                    onClick={() => {
+                                                      if (showPasswords[beId]) {
+                                                        copyToClipboard(beDbPassword)
+                                                      } else {
+                                                        setShowPasswords(prev => ({ ...prev, [beId]: !prev[beId] }))
+                                                      }
+                                                    }}
+                                                    title={showPasswords[beId] ? "Sao chép password" : "Hiện mật khẩu"}
+                                                  >
+                                                    {showPasswords[beId] ? (
+                                                      <Copy className="w-3 h-3" />
+                                                    ) : (
+                                                      <Eye className="w-3 h-3" />
+                                                    )}
+                                                  </Button>
+                                                  {showPasswords[beId] && (
+                                                    <Button
+                                                      variant="ghost"
+                                                      size="icon"
+                                                      className="h-6 w-6"
+                                                      onClick={() => setShowPasswords(prev => ({ ...prev, [beId]: !prev[beId] }))}
+                                                      title="Ẩn mật khẩu"
+                                                    >
+                                                      <EyeOff className="w-3 h-3" />
+                                                    </Button>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="flex justify-end mt-5 pt-4 border-t border-border/50">
+                                <DropdownMenu
+                                  trigger={
+                                    <Button variant="outline" size="sm">
+                                      <MoreVertical className="w-4 h-4 mr-2" />
+                                      Thao tác
+                                    </Button>
                                   }
                                 >
-                                  <Pause className="w-4 h-4 mr-2" />
-                                  Tạm dừng
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    if (beApiId !== null) {
-                                      handleDelete(beName, "backend", beApiId)
-                                    } else {
-                                      handleDelete(beName, "backend")
+                                  {beApiId !== null && (
+                                    <DropdownMenuItem
+                                      onClick={() => openAdjustBackendModal(backendData)}
+                                    >
+                                      <SlidersHorizontal className="w-4 h-4 mr-2" />
+                                      Điều chỉnh replicas
+                                    </DropdownMenuItem>
+                                  )}
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      if (beApiId !== null) {
+                                        handleBackendStart(beApiId, beName)
+                                      } else {
+                                        handleStart(beName, "backend")
+                                      }
+                                    }}
+                                    disabled={deploying || ["running", "deployed"].includes(beStatusKey)}
+                                  >
+                                    <Play className="w-4 h-4 mr-2" />
+                                    Chạy
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      if (beApiId !== null) {
+                                        handleBackendStop(beApiId, beName)
+                                      } else {
+                                        handlePause(beName, "backend")
+                                      }
+                                    }}
+                                    disabled={
+                                      deploying ||
+                                      ["paused", "stopped"].includes(beStatusKey) ||
+                                      ["pending", "building", "deploying"].includes(beStatusKey)
                                     }
-                                  }}
-                                  className="text-destructive focus:text-destructive"
-                                >
-                                  <Trash2 className="w-4 h-4 mr-2" />
-                                  Xóa
-                                </DropdownMenuItem>
-                              </DropdownMenu>
-                            </div>
-                          </CardContent>
-                        </Card>
+                                  >
+                                    <Pause className="w-4 h-4 mr-2" />
+                                    Tạm dừng
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      if (beApiId !== null) {
+                                        handleDelete(beName, "backend", beApiId)
+                                      } else {
+                                        handleDelete(beName, "backend")
+                                      }
+                                    }}
+                                    className="text-destructive focus:text-destructive"
+                                  >
+                                    <Trash2 className="w-4 h-4 mr-2" />
+                                    Xóa
+                                  </DropdownMenuItem>
+                                </DropdownMenu>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        </motion.div>
                       )
                     })}
                   </div>
                 ) : (
-                  <p className="text-center text-muted-foreground py-12">
-                    Chưa có backend nào
-                  </p>
+                  <div className="text-center py-16">
+                    <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-purple-100 dark:bg-purple-950/30 mb-4">
+                      <Server className="w-10 h-10 text-purple-600 dark:text-purple-400" />
+                    </div>
+                    <h3 className="text-lg font-semibold mb-1">Chưa có backend nào</h3>
+                    <p className="text-sm text-muted-foreground mb-6">
+                      Bắt đầu bằng cách thêm backend service mới cho dự án của bạn
+                    </p>
+                    <Button onClick={() => setShowAddBackend(true)}>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Thêm Backend đầu tiên
+                    </Button>
+                  </div>
                 )}
               </TabsContent>
 
               <TabsContent value="frontends" className="p-6">
                 {/* Header với nút thêm */}
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-lg font-semibold">Frontends</h3>
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-green-100 dark:bg-green-950/30">
+                      <Globe className="w-5 h-5 text-green-600 dark:text-green-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-semibold">Frontends</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Quản lý và triển khai các frontend applications của dự án
+                      </p>
+                    </div>
+                  </div>
                   <Button onClick={() => setShowAddFrontend(true)}>
                     <Plus className="w-4 h-4 mr-2" />
                     Thêm Frontend
@@ -1893,26 +2304,41 @@ export function ProjectDetail() {
 
                 {/* Thống kê Frontends */}
                 {stats && (
-                  <Card className="mb-6">
-                    <CardContent className="p-4">
-                      <div className="grid grid-cols-3 gap-4 text-center">
-                        <div>
-                          <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                            {stats.frontends.total}
+                  <Card className="mb-6 border-border/50 shadow-sm">
+                    <CardContent className="p-5">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="flex items-center gap-4 p-4 rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200/50 dark:border-green-900/50">
+                          <div className="p-3 rounded-lg bg-green-100 dark:bg-green-950/30">
+                            <Globe className="w-6 h-6 text-green-600 dark:text-green-400" />
                           </div>
-                          <div className="text-sm text-muted-foreground mt-1">Tổng số</div>
+                          <div>
+                            <div className="text-2xl font-bold text-green-700 dark:text-green-300">
+                              {stats.frontends.total}
+                            </div>
+                            <div className="text-sm text-muted-foreground mt-0.5">Tổng số</div>
+                          </div>
                         </div>
-                        <div>
-                          <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                            {stats.frontends.running}
+                        <div className="flex items-center gap-4 p-4 rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200/50 dark:border-green-900/50">
+                          <div className="p-3 rounded-lg bg-green-100 dark:bg-green-950/30">
+                            <Check className="w-6 h-6 text-green-600 dark:text-green-400" />
                           </div>
-                          <div className="text-sm text-muted-foreground mt-1">Đang chạy</div>
+                          <div>
+                            <div className="text-2xl font-bold text-green-700 dark:text-green-300">
+                              {stats.frontends.running}
+                            </div>
+                            <div className="text-sm text-muted-foreground mt-0.5">Đang chạy</div>
+                          </div>
                         </div>
-                        <div>
-                          <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
-                            {stats.frontends.paused}
+                        <div className="flex items-center gap-4 p-4 rounded-lg bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200/50 dark:border-yellow-900/50">
+                          <div className="p-3 rounded-lg bg-yellow-100 dark:bg-yellow-950/30">
+                            <Pause className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
                           </div>
-                          <div className="text-sm text-muted-foreground mt-1">Đang dừng</div>
+                          <div>
+                            <div className="text-2xl font-bold text-yellow-700 dark:text-yellow-300">
+                              {stats.frontends.paused}
+                            </div>
+                            <div className="text-sm text-muted-foreground mt-0.5">Đang dừng</div>
+                          </div>
                         </div>
                       </div>
                     </CardContent>
@@ -1936,198 +2362,381 @@ export function ProjectDetail() {
                       const feId = isApiData ? `api-fe-${(fe as FrontendInfo).id}` : (fe as any).id
                       const feApiId = isApiData ? (fe as FrontendInfo).id : null
 
+                      const getFrontendTechColor = (tech: string) => {
+                        if (tech === "REACT" || tech === "react") {
+                          return { bg: "bg-cyan-100 dark:bg-cyan-950/30", text: "text-cyan-600 dark:text-cyan-400", border: "border-cyan-300 dark:border-cyan-800", textBadge: "text-cyan-700 dark:text-cyan-300", bgBadge: "bg-cyan-50 dark:bg-cyan-950/30" }
+                        } else if (tech === "VUE" || tech === "vue") {
+                          return { bg: "bg-emerald-100 dark:bg-emerald-950/30", text: "text-emerald-600 dark:text-emerald-400", border: "border-emerald-300 dark:border-emerald-800", textBadge: "text-emerald-700 dark:text-emerald-300", bgBadge: "bg-emerald-50 dark:bg-emerald-950/30" }
+                        } else if (tech === "ANGULAR" || tech === "angular") {
+                          return { bg: "bg-red-100 dark:bg-red-950/30", text: "text-red-600 dark:text-red-400", border: "border-red-300 dark:border-red-800", textBadge: "text-red-700 dark:text-red-300", bgBadge: "bg-red-50 dark:bg-red-950/30" }
+                        }
+                        return { bg: "bg-green-100 dark:bg-green-950/30", text: "text-green-600 dark:text-green-400", border: "border-green-300 dark:border-green-800", textBadge: "text-green-700 dark:text-green-300", bgBadge: "bg-green-50 dark:bg-green-950/30" }
+                      }
+                      
+                      const techColors = getFrontendTechColor(feTech || "")
+                      
                       return (
-                        <Card key={feId}>
-                          <CardHeader>
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1">
-                                <CardTitle className="text-lg">{feName}</CardTitle>
-                                {feDescription && (
-                                  <CardDescription className="mt-1">
-                                    {feDescription}
-                                  </CardDescription>
-                                )}
-                                <CardDescription className="mt-1">
-                                  {feTech === "REACT" || feTech === "react" ? "React" : 
-                                   feTech === "VUE" || feTech === "vue" ? "Vue" : 
-                                   feTech === "ANGULAR" || feTech === "angular" ? "Angular" : feTech}
-                                </CardDescription>
-                              </div>
-                              <Badge variant={feStatus.variant}>
-                                {feStatus.label}
-                              </Badge>
-                            </div>
-                          </CardHeader>
-                          <CardContent>
-                            <div className="space-y-3">
-                              {/* DNS */}
-                              {feDns && (
-                                <div>
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-xs font-medium text-muted-foreground uppercase">
-                                      DNS
-                                    </span>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-5 w-5"
-                                      onClick={() => copyToClipboard(feDns!)}
-                                      title="Sao chép DNS"
-                                    >
-                                      <Copy className="w-3 h-3" />
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-5 w-5"
-                                      onClick={() => handleCheckDNS(feDns)}
-                                      title="Kiểm tra DNS"
-                                    >
-                                      <CheckCircle2 className="w-3 h-3" />
-                                    </Button>
+                        <motion.div
+                          key={feId}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.2 }}
+                        >
+                          <Card className="hover:shadow-lg transition-all duration-300 border-border/50 h-full flex flex-col">
+                            <CardHeader className="pb-4 border-b border-border/50 bg-gradient-to-br from-green-50/50 to-transparent dark:from-green-950/20">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex items-start gap-3 flex-1 min-w-0">
+                                  <div className={`p-2.5 rounded-lg flex-shrink-0 ${techColors.bg}`}>
+                                    <Globe className={`w-5 h-5 ${techColors.text}`} />
                                   </div>
-                                  <a
-                                    href={`http://${feDns}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-sm text-primary hover:underline flex items-center gap-1 mt-1"
-                                  >
-                                    {feDns}
-                                    <ExternalLink className="w-3 h-3" />
-                                  </a>
+                                  <div className="flex-1 min-w-0">
+                                    <CardTitle className="text-lg font-semibold mb-1 truncate">{feName}</CardTitle>
+                                    {feDescription && (
+                                      <CardDescription className="text-xs line-clamp-1 mb-2">
+                                        {feDescription}
+                                      </CardDescription>
+                                    )}
+                                    <Badge 
+                                      variant="outline" 
+                                      className={`text-xs ${techColors.border} ${techColors.textBadge} ${techColors.bgBadge}`}
+                                    >
+                                      {feTech === "REACT" || feTech === "react" ? "React" : 
+                                       feTech === "VUE" || feTech === "vue" ? "Vue" : 
+                                       feTech === "ANGULAR" || feTech === "angular" ? "Angular" : feTech || "Frontend"}
+                                    </Badge>
+                                  </div>
                                 </div>
-                              )}
-
-                              {/* Docker Image */}
-                              {feDockerImage && (
-                                <div>
-                                  <span className="text-xs font-medium text-muted-foreground uppercase">
-                                    Docker Image
-                                  </span>
-                                  <p className="text-sm font-mono mt-1">{feDockerImage}</p>
-                                </div>
-                              )}
-                            </div>
-
-                            <div className="flex justify-end mt-4">
-                              <DropdownMenu
-                                trigger={
-                                  <Button variant="outline" size="sm">
-                                    <MoreVertical className="w-4 h-4 mr-2" />
-                                    Thao tác
-                                  </Button>
-                                }
-                              >
-                                {feApiId !== null && (
-                                  <DropdownMenuItem onClick={() => openAdjustFrontendModal(frontendData)}>
-                                    <SlidersHorizontal className="w-4 h-4 mr-2" />
-                                    Điều chỉnh replicas
-                                  </DropdownMenuItem>
+                                <Badge variant={feStatus.variant} className="flex-shrink-0">
+                                  {feStatus.label}
+                                </Badge>
+                              </div>
+                            </CardHeader>
+                            <CardContent className="p-5 flex-1">
+                              <div className="space-y-4">
+                                {/* DNS */}
+                                {feDns && (
+                                  <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 border border-border/50">
+                                    <Globe className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                                    <div className="flex-1 min-w-0">
+                                      <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">
+                                        Domain Name System (DNS)
+                                      </Label>
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <a
+                                          href={`http://${feDns}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-sm font-mono text-primary hover:underline flex items-center gap-1.5 flex-1 min-w-0"
+                                          onClick={(e) => {
+                                            e.preventDefault()
+                                            window.open(`http://${feDns}`, '_blank')
+                                          }}
+                                        >
+                                          <span className="truncate">{feDns}</span>
+                                          <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                                        </a>
+                                        <div className="flex items-center gap-1 flex-shrink-0">
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-6 w-6"
+                                            onClick={() => copyToClipboard(feDns!)}
+                                            title="Sao chép DNS"
+                                          >
+                                            <Copy className="w-3 h-3" />
+                                          </Button>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-6 w-6"
+                                            onClick={() => handleCheckDNS(feDns)}
+                                            title="Kiểm tra DNS"
+                                          >
+                                            <CheckCircle2 className="w-3 h-3" />
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
                                 )}
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    if (feApiId !== null) {
-                                      handleFrontendStart(feApiId, feName)
-                                    } else {
-                                      handleStart(feName, "frontend")
-                                    }
-                                  }}
-                                  disabled={deploying || ["running", "deployed"].includes(feStatusKey)}
-                                >
-                                  <Play className="w-4 h-4 mr-2" />
-                                  Chạy
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    if (feApiId !== null) {
-                                      handleFrontendStop(feApiId, feName)
-                                    } else {
-                                      handlePause(feName, "frontend")
-                                    }
-                                  }}
-                                  disabled={
-                                    deploying ||
-                                    ["paused", "stopped"].includes(feStatusKey) ||
-                                    ["pending", "building", "deploying"].includes(feStatusKey)
+
+                                {/* Docker Image */}
+                                {feDockerImage && (
+                                  <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 border border-border/50">
+                                    <Package className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                                    <div className="flex-1 min-w-0">
+                                      <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">
+                                        Docker Image
+                                      </Label>
+                                      <div className="flex items-center gap-2">
+                                        <p className="text-sm font-mono flex-1 truncate">{feDockerImage}</p>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-6 w-6 flex-shrink-0"
+                                          onClick={() => copyToClipboard(feDockerImage)}
+                                          title="Sao chép Docker Image"
+                                        >
+                                          <Copy className="w-3 h-3" />
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="flex justify-end mt-5 pt-4 border-t border-border/50">
+                                <DropdownMenu
+                                  trigger={
+                                    <Button variant="outline" size="sm">
+                                      <MoreVertical className="w-4 h-4 mr-2" />
+                                      Thao tác
+                                    </Button>
                                   }
                                 >
-                                  <Pause className="w-4 h-4 mr-2" />
-                                  Tạm dừng
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    if (feApiId !== null) {
-                                      handleDelete(feName, "frontend", feApiId)
-                                    } else {
-                                      handleDelete(feName, "frontend")
+                                  {feApiId !== null && (
+                                    <DropdownMenuItem onClick={() => openAdjustFrontendModal(frontendData)}>
+                                      <SlidersHorizontal className="w-4 h-4 mr-2" />
+                                      Điều chỉnh replicas
+                                    </DropdownMenuItem>
+                                  )}
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      if (feApiId !== null) {
+                                        handleFrontendStart(feApiId, feName)
+                                      } else {
+                                        handleStart(feName, "frontend")
+                                      }
+                                    }}
+                                    disabled={deploying || ["running", "deployed"].includes(feStatusKey)}
+                                  >
+                                    <Play className="w-4 h-4 mr-2" />
+                                    Chạy
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      if (feApiId !== null) {
+                                        handleFrontendStop(feApiId, feName)
+                                      } else {
+                                        handlePause(feName, "frontend")
+                                      }
+                                    }}
+                                    disabled={
+                                      deploying ||
+                                      ["paused", "stopped"].includes(feStatusKey) ||
+                                      ["pending", "building", "deploying"].includes(feStatusKey)
                                     }
-                                  }}
-                                  className="text-destructive focus:text-destructive"
-                                >
-                                  <Trash2 className="w-4 h-4 mr-2" />
-                                  Xóa
-                                </DropdownMenuItem>
-                              </DropdownMenu>
-                            </div>
-                          </CardContent>
-                        </Card>
+                                  >
+                                    <Pause className="w-4 h-4 mr-2" />
+                                    Tạm dừng
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      if (feApiId !== null) {
+                                        handleDelete(feName, "frontend", feApiId)
+                                      } else {
+                                        handleDelete(feName, "frontend")
+                                      }
+                                    }}
+                                    className="text-destructive focus:text-destructive"
+                                  >
+                                    <Trash2 className="w-4 h-4 mr-2" />
+                                    Xóa
+                                  </DropdownMenuItem>
+                                </DropdownMenu>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        </motion.div>
                       )
                     })}
                   </div>
                 ) : (
-                  <p className="text-center text-muted-foreground py-12">
-                    Chưa có frontend nào
-                  </p>
+                  <div className="text-center py-16">
+                    <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-green-100 dark:bg-green-950/30 mb-4">
+                      <Globe className="w-10 h-10 text-green-600 dark:text-green-400" />
+                    </div>
+                    <h3 className="text-lg font-semibold mb-1">Chưa có frontend nào</h3>
+                    <p className="text-sm text-muted-foreground mb-6">
+                      Bắt đầu bằng cách thêm frontend application mới cho dự án của bạn
+                    </p>
+                    <Button onClick={() => setShowAddFrontend(true)}>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Thêm Frontend đầu tiên
+                    </Button>
+                  </div>
                 )}
               </TabsContent>
 
               <TabsContent value="history" className="p-6">
                 {loadingHistory ? (
                   <div className="flex items-center justify-center py-12">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                    <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+                    <span className="ml-3 text-sm text-muted-foreground">Đang tải lịch sử triển khai...</span>
                   </div>
                 ) : deploymentHistory.length === 0 ? (
-                  <div className="text-center text-muted-foreground py-12">
-                    Chưa có lịch sử triển khai
+                  <div className="text-center py-12">
+                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
+                      <Clock className="w-8 h-8 text-muted-foreground" />
+                    </div>
+                    <h3 className="text-lg font-semibold mb-1">Chưa có lịch sử triển khai</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Lịch sử các lần triển khai sẽ hiển thị ở đây
+                    </p>
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    {deploymentHistory.map((item, index) => {
-                      const badgeConfig = getTypeBadge(item.type)
-                      return (
-                        <div key={`${item.type}-${item.id}`} className="text-sm p-4 bg-muted rounded-lg">
-                          <div className="flex items-center justify-between mb-1">
-                            <div className="flex items-center gap-2">
-                              <Badge variant={badgeConfig.variant}>{badgeConfig.label}</Badge>
-                              <span className="font-medium">{item.name}</span>
+                  <div className="relative">
+                    {/* Timeline line */}
+                    <div className="absolute left-8 top-0 bottom-0 w-0.5 bg-border" />
+                    
+                    <div className="space-y-6">
+                      {deploymentHistory.map((item, index) => {
+                        const badgeConfig = getTypeBadge(item.type)
+                        const getTypeIcon = () => {
+                          switch (item.type) {
+                            case "DATABASE":
+                              return <Database className="w-5 h-5" />
+                            case "BACKEND":
+                              return <Server className="w-5 h-5" />
+                            case "FRONTEND":
+                              return <Globe className="w-5 h-5" />
+                            default:
+                              return <CheckCircle2 className="w-5 h-5" />
+                          }
+                        }
+                        
+                        const getTypeColor = () => {
+                          switch (item.type) {
+                            case "DATABASE":
+                              return "bg-blue-500 text-white border-blue-500"
+                            case "BACKEND":
+                              return "bg-purple-500 text-white border-purple-500"
+                            case "FRONTEND":
+                              return "bg-green-500 text-white border-green-500"
+                            default:
+                              return "bg-gray-500 text-white border-gray-500"
+                          }
+                        }
+                        
+                        return (
+                          <motion.div
+                            key={`${item.type}-${item.id}-${index}`}
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ duration: 0.3, delay: index * 0.05 }}
+                            className="relative pl-20"
+                          >
+                            {/* Timeline dot */}
+                            <div className={`absolute left-6 top-6 w-4 h-4 rounded-full border-2 ${getTypeColor()} flex items-center justify-center z-10`}>
+                              <div className="w-2 h-2 rounded-full bg-white" />
                             </div>
-                            <span className="text-xs text-muted-foreground">
-                              {new Date(item.createdAt).toLocaleString("vi-VN")}
-                            </span>
-                          </div>
-                          {item.description && (
-                            <div className="text-muted-foreground mb-2">{item.description}</div>
-                          )}
-                          <div className="flex gap-2 flex-wrap text-xs text-muted-foreground">
-                            {item.type === "DATABASE" && item.databaseType && (
-                              <span>Loại: {item.databaseType}</span>
-                            )}
-                            {item.type === "BACKEND" && (
-                              <>
-                                {item.frameworkType && <span>Framework: {item.frameworkType}</span>}
-                                {item.deploymentType && <span>Deployment: {item.deploymentType}</span>}
-                              </>
-                            )}
-                            {item.type === "FRONTEND" && (
-                              <>
-                                {item.frameworkType && <span>Framework: {item.frameworkType}</span>}
-                                {item.deploymentType && <span>Deployment: {item.deploymentType}</span>}
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      )
-                    })}
+                            
+                            <Card className="hover:shadow-md transition-shadow border-l-4" style={{
+                              borderLeftColor: item.type === "DATABASE" ? "#3b82f6" : 
+                                             item.type === "BACKEND" ? "#a855f7" : 
+                                             item.type === "FRONTEND" ? "#10b981" : "#6b7280"
+                            }}>
+                              <CardContent className="p-5">
+                                <div className="flex items-start justify-between gap-4 mb-3">
+                                  <div className="flex items-start gap-3 flex-1">
+                                    <div className={`p-2 rounded-lg ${
+                                      item.type === "DATABASE" ? "bg-blue-50 dark:bg-blue-950/30" :
+                                      item.type === "BACKEND" ? "bg-purple-50 dark:bg-purple-950/30" :
+                                      item.type === "FRONTEND" ? "bg-green-50 dark:bg-green-950/30" :
+                                      "bg-gray-50 dark:bg-gray-950/30"
+                                    }`}>
+                                      <div className={
+                                        item.type === "DATABASE" ? "text-blue-600 dark:text-blue-400" :
+                                        item.type === "BACKEND" ? "text-purple-600 dark:text-purple-400" :
+                                        item.type === "FRONTEND" ? "text-green-600 dark:text-green-400" :
+                                        "text-gray-600 dark:text-gray-400"
+                                      }>
+                                        {getTypeIcon()}
+                                      </div>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <Badge variant={badgeConfig.variant} className="text-xs">
+                                          {badgeConfig.label}
+                                        </Badge>
+                                        <h4 className="font-semibold text-base truncate">{item.name}</h4>
+                                      </div>
+                                      {item.description && (
+                                        <p className="text-sm text-muted-foreground mb-2 line-clamp-2">
+                                          {item.description}
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2 text-xs text-muted-foreground whitespace-nowrap">
+                                    <Clock className="w-3.5 h-3.5" />
+                                    <span>
+                                      {new Date(item.createdAt).toLocaleString("vi-VN", {
+                                        day: "2-digit",
+                                        month: "2-digit",
+                                        year: "numeric",
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      })}
+                                    </span>
+                                  </div>
+                                </div>
+                                
+                                {/* Details */}
+                                <div className="flex flex-wrap gap-x-4 gap-y-2 pt-3 border-t border-border">
+                                  {item.type === "DATABASE" && item.databaseType && (
+                                    <div className="flex items-center gap-1.5 text-xs">
+                                      <span className="text-muted-foreground">Loại:</span>
+                                      <span className="font-medium">{item.databaseType}</span>
+                                    </div>
+                                  )}
+                                  {item.type === "BACKEND" && (
+                                    <>
+                                      {item.frameworkType && (
+                                        <div className="flex items-center gap-1.5 text-xs">
+                                          <span className="text-muted-foreground">Framework:</span>
+                                          <span className="font-medium">{item.frameworkType}</span>
+                                        </div>
+                                      )}
+                                      {item.deploymentType && (
+                                        <div className="flex items-center gap-1.5 text-xs">
+                                          <span className="text-muted-foreground">Deployment:</span>
+                                          <span className="font-medium">
+                                            {item.deploymentType === "DOCKER" ? "Docker Image" : 
+                                             item.deploymentType === "FILE" ? "File ZIP" : 
+                                             item.deploymentType}
+                                          </span>
+                                        </div>
+                                      )}
+                                    </>
+                                  )}
+                                  {item.type === "FRONTEND" && (
+                                    <>
+                                      {item.frameworkType && (
+                                        <div className="flex items-center gap-1.5 text-xs">
+                                          <span className="text-muted-foreground">Framework:</span>
+                                          <span className="font-medium">{item.frameworkType}</span>
+                                        </div>
+                                      )}
+                                      {item.deploymentType && (
+                                        <div className="flex items-center gap-1.5 text-xs">
+                                          <span className="text-muted-foreground">Deployment:</span>
+                                          <span className="font-medium">
+                                            {item.deploymentType === "DOCKER" ? "Docker Image" : 
+                                             item.deploymentType === "FILE" ? "File ZIP" : 
+                                             item.deploymentType}
+                                          </span>
+                                        </div>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+                              </CardContent>
+                            </Card>
+                          </motion.div>
+                        )
+                      })}
+                    </div>
                   </div>
                 )}
               </TabsContent>
@@ -2155,27 +2764,32 @@ export function ProjectDetail() {
         {/* Dialog thêm Database */}
         <Dialog open={showAddDatabase} onOpenChange={setShowAddDatabase}>
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Thêm Database</DialogTitle>
-              <DialogDescription>
-                Thêm database mới vào project
+            <DialogHeader className="pb-4 border-b border-border/50">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-950/30">
+                  <Database className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <DialogTitle className="text-xl">Thêm Database</DialogTitle>
+              </div>
+              <DialogDescription className="text-sm mt-1">
+                Tạo và triển khai database mới cho dự án của bạn
               </DialogDescription>
             </DialogHeader>
             
             <HintBox title="Hướng dẫn">
               <ul className="list-disc list-inside space-y-1 text-sm">
-                <li>Chọn loại database: MySQL hoặc MongoDB</li>
+                <li><strong>Chọn loại database:</strong> MySQL hoặc MongoDB</li>
                 <li>
-                  Hệ thống sẽ tự động tạo và quản lý database (chỉ thao tác qua ứng dụng, không cấp quyền đăng nhập DB)
+                  <strong>Hệ thống sẽ tự động tạo và quản lý database</strong>
                 </li>
                 <li>
-                  Upload file ZIP: Chỉ nhận tệp .zip. Khi giải nén, tên thư mục gốc phải trùng với tên database
+                  <strong>Upload file ZIP:</strong> Chỉ nhận tệp .zip. Khi giải nén, tên thư mục gốc phải trùng với tên database
                 </li>
-                <li>Ví dụ cấu trúc: <code className="bg-muted px-1 rounded">my-database/schema.sql</code></li>
+                <li><strong>Ví dụ cấu trúc:</strong> <code className="bg-muted px-1 rounded">my-database.zip (chứa duy nhất 1 file my-database.sql)</code></li>
               </ul>
             </HintBox>
             
-            <form onSubmit={handleSubmitDb(onSubmitDatabase)} className="space-y-4">
+            <form onSubmit={handleSubmitDb(onSubmitDatabase)} className="space-y-6 mt-6">
               {isDeployingDatabase && (
                 <div className="p-4 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
                   <div className="flex items-center gap-2">
@@ -2189,59 +2803,70 @@ export function ProjectDetail() {
                   </p>
                 </div>
               )}
-              <div>
-                <Label htmlFor="db-name">
-                  Tên Database <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="db-name"
-                  {...registerDb("name")}
-                  placeholder="my-database"
-                  disabled={isDeployingDatabase}
-                />
-                {errorsDb.name && (
-                  <p className="text-sm text-destructive mt-1">
-                    {errorsDb.name.message}
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <Label htmlFor="db-type">
-                  Loại Database <span className="text-destructive">*</span>
-                </Label>
-                <Controller
-                  name="type"
-                  control={controlDb}
-                  render={({ field }) => (
-                    <Select value={field.value} onValueChange={field.onChange} disabled={isDeployingDatabase}>
-                      <SelectTrigger id="db-type">
-                        <SelectValue placeholder="Chọn loại database" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="mysql">MySQL</SelectItem>
-                        <SelectItem value="mongodb">MongoDB</SelectItem>
-                      </SelectContent>
-                </Select>
-                  )}
-                />
-                {errorsDb.type && (
-                  <p className="text-sm text-destructive mt-1">
-                    {errorsDb.type.message}
-                  </p>
-                )}
-              </div>
-
-              {/* Form fields cho Database connection - chỉ hiển thị cho hệ thống */}
-              <div className="p-4 bg-muted rounded-lg space-y-4">
-                <div>
-                  <Label className="text-sm font-medium mb-2 block">
-                    Thông tin Database
-                  </Label>
-                  <p className="text-xs text-muted-foreground mb-3">
-                    Nhập thông tin database
-                  </p>
+              
+              {/* Basic Information */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-border/50">
+                  <FileText className="w-4 h-4 text-muted-foreground" />
+                  <Label className="text-base font-semibold">Thông tin cơ bản</Label>
                 </div>
+                
+                <div>
+                  <Label htmlFor="db-name" className="text-sm font-medium">
+                    Tên Dự Án Database <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="db-name"
+                    {...registerDb("name")}
+                    placeholder="my-database"
+                    disabled={isDeployingDatabase}
+                    className="mt-1.5"
+                  />
+                  {errorsDb.name && (
+                    <p className="text-sm text-destructive mt-1">
+                      {errorsDb.name.message}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <Label htmlFor="db-type" className="text-sm font-medium">
+                    Loại Database <span className="text-destructive">*</span>
+                  </Label>
+                  <Controller
+                    name="type"
+                    control={controlDb}
+                    render={({ field }) => (
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <SelectTrigger id="db-type" disabled={isDeployingDatabase} className="mt-1.5">
+                          <SelectValue placeholder="Chọn loại database" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="mysql">MySQL</SelectItem>
+                          <SelectItem value="mongodb">MongoDB</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                  {errorsDb.type && (
+                    <p className="text-sm text-destructive mt-1">
+                      {errorsDb.type.message}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Database Connection Information */}
+              <div className="p-5 bg-muted/50 rounded-lg border border-border/50 space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-border/50">
+                  <Database className="w-4 h-4 text-muted-foreground" />
+                  <Label className="text-base font-semibold">
+                    Thông tin Database của hệ thống
+                  </Label>
+                </div>
+                <p className="text-xs text-muted-foreground mb-1">
+                  Nhập thông tin database của bạn muốn tạo
+                </p>
                 <div className="space-y-4">
                   <div>
                     <Label htmlFor="db-databaseName">
@@ -2298,71 +2923,89 @@ export function ProjectDetail() {
               </div>
 
               {/* Upload ZIP */}
-              <div>
-                <Label>Upload file ZIP (tùy chọn)</Label>
-                <div
-                  className={`mt-2 border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
-                    isDeployingDatabase 
-                      ? "opacity-50 cursor-not-allowed" 
-                      : "cursor-pointer hover:bg-muted"
-                  }`}
-                  onClick={() => !isDeployingDatabase && document.getElementById("zip-input-db-modal")?.click()}
-                >
-                  {zipFileDb ? (
-                    <div>
-                      <p className="font-medium">{zipFileDb.name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {(zipFileDb.size / 1024 / 1024).toFixed(2)} MB
-                      </p>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="mt-2"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setZipFileDb(null)
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-border/50">
+                  <Upload className="w-4 h-4 text-muted-foreground" />
+                  <Label className="text-base font-semibold">Upload File (Tùy chọn)</Label>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium mb-1.5 block">
+                    Upload file ZIP (nếu không có file SQL, hệ thống sẽ tạo database rỗng với tên mà bạn nhập)
+                  </Label>
+                  <div
+                    className={`mt-2 border-2 border-dashed rounded-lg p-8 text-center transition-all ${
+                      isDeployingDatabase 
+                        ? "opacity-50 cursor-not-allowed border-muted-foreground/30" 
+                        : "cursor-pointer hover:bg-muted/50 hover:border-primary/50 border-border"
+                    }`}
+                    onClick={() => !isDeployingDatabase && document.getElementById("zip-input-db-modal")?.click()}
+                  >
+                    {zipFileDb ? (
+                      <div className="space-y-3">
+                        <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-green-100 dark:bg-green-950/30">
+                          <CheckCircle2 className="w-6 h-6 text-green-600 dark:text-green-400" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-sm">{zipFileDb.name}</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {(zipFileDb.size / 1024 / 1024).toFixed(2)} MB
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setZipFileDb(null)
+                            setZipErrorDb("")
+                          }}
+                          disabled={isDeployingDatabase}
+                        >
+                          <X className="w-3 h-3 mr-1" />
+                          Xóa file
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-muted">
+                          <Upload className="w-6 h-6 text-muted-foreground" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium">Chọn file hoặc kéo thả vào đây</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            File ZIP, tối đa 100 MB
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <input
+                    id="zip-input-db-modal"
+                    type="file"
+                    accept=".zip"
+                    className="hidden"
+                    disabled={isDeployingDatabase}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) {
+                        const validation = validateZipFile(file)
+                        if (validation.valid) {
+                          setZipFileDb(file)
                           setZipErrorDb("")
-                        }}
-                      >
-                        Xóa file
-                      </Button>
-                    </div>
-                  ) : (
-                    <div>
-                      <Upload className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
-                      <p className="text-sm">Chọn file hoặc kéo thả vào đây</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        File ZIP, tối đa 100 MB
-                      </p>
-                    </div>
+                        } else {
+                          setZipErrorDb(validation.message || "")
+                        }
+                      }
+                    }}
+                  />
+                  {zipErrorDb && (
+                    <p className="text-sm text-destructive mt-1">{zipErrorDb}</p>
                   )}
                 </div>
-                <input
-                  id="zip-input-db-modal"
-                  type="file"
-                  accept=".zip"
-                  className="hidden"
-                  disabled={isDeployingDatabase}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0]
-                    if (file) {
-                      const validation = validateZipFile(file)
-                      if (validation.valid) {
-                        setZipFileDb(file)
-                        setZipErrorDb("")
-                      } else {
-                        setZipErrorDb(validation.message || "")
-                      }
-                    }
-                  }}
-                />
-                {zipErrorDb && (
-                  <p className="text-sm text-destructive mt-1">{zipErrorDb}</p>
-                )}
               </div>
 
-              <div className="flex justify-end gap-2">
+              <div className="flex justify-end gap-3 pt-4 border-t border-border/50">
                 <Button
                   type="button"
                   variant="outline"
@@ -2376,14 +3019,17 @@ export function ProjectDetail() {
                 >
                   Hủy
                 </Button>
-                <Button type="submit" disabled={isDeployingDatabase}>
+                <Button type="submit" disabled={isDeployingDatabase} className="min-w-[140px]">
                   {isDeployingDatabase ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                       Đang triển khai...
                     </>
                   ) : (
-                    "Thêm Database"
+                    <>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Thêm Database
+                    </>
                   )}
                 </Button>
               </div>
@@ -2394,32 +3040,37 @@ export function ProjectDetail() {
         {/* Dialog thêm Backend */}
         <Dialog open={showAddBackend} onOpenChange={setShowAddBackend}>
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Thêm Backend</DialogTitle>
-              <DialogDescription>
-                Thêm backend mới vào project
+            <DialogHeader className="pb-4 border-b border-border/50">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-950/30">
+                  <Server className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                </div>
+                <DialogTitle className="text-xl">Thêm Backend</DialogTitle>
+              </div>
+              <DialogDescription className="text-sm mt-1">
+                Tạo và triển khai backend service mới cho dự án của bạn
               </DialogDescription>
             </DialogHeader>
             
             <HintBox title="Hướng dẫn">
               <ul className="list-disc list-inside space-y-1 text-sm">
-                <li>Chọn Spring Boot hoặc Node.js</li>
+                <li><strong>Chọn Framework:</strong> Spring Boot hoặc Node.js</li>
                 <li>
-                  <strong>Upload ZIP:</strong> Tên thư mục gốc trùng với tên dự án. Spring Boot cần <code className="bg-muted px-1 rounded">pom.xml</code> hoặc <code className="bg-muted px-1 rounded">build.gradle</code>. Node cần <code className="bg-muted px-1 rounded">package.json</code>
+                  <strong>Upload ZIP:</strong> Tên thư mục gốc trùng với tên dự án.
                 </li>
                 <li>
-                  <strong>Docker Image:</strong> Định dạng <code className="bg-muted px-1 rounded">owner/name:tag</code> (ví dụ: <code className="bg-muted px-1 rounded">docker.io/user/app:1.0.0</code>)
+                  <strong>Docker Image:</strong> Phải có file Dockerfile trong thư mục gốc
                 </li>
                 <li>
-                  <strong>DNS:</strong> Chỉ a-z, 0-9, '-', dài 3-63 ký tự, không bắt đầu/kết thúc bằng '-' (ví dụ: <code className="bg-muted px-1 rounded">api.myapp.local.test</code>)
+                  <strong>Domain Name:</strong> Không chứa ký tự đặc biệt, không bắt đầu/kết thúc bằng '-' (ví dụ: <code className="bg-muted px-1 rounded">api.myapp.local.test</code>)
                 </li>
                 <li>
-                  <strong>Kết nối Database:</strong> Nhập thông tin kết nối database (tên, IP, Port, Username, Password) để backend có thể kết nối
+                  <strong>Kết nối Database:</strong> Bạn có thể nhập thủ công thông tin kết nối database hoặc chọn từ danh sách database đã tạo ở bước trước. Nếu không có database, backend sẽ không hoạt động.
                 </li>
               </ul>
             </HintBox>
             
-            <form onSubmit={handleSubmitBe(onSubmitBackend)} className="space-y-4">
+            <form onSubmit={handleSubmitBe(onSubmitBackend)} className="space-y-6 mt-6">
               {isDeployingBackend && (
                 <div className="p-4 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
                   <div className="flex items-center gap-2">
@@ -2433,46 +3084,73 @@ export function ProjectDetail() {
                   </p>
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="be-name">Tên Backend <span className="text-destructive">*</span></Label>
-                  <Input id="be-name" {...registerBe("name")} placeholder="api-service" disabled={isDeployingBackend} />
-                  {errorsBe.name && (
-                    <p className="text-sm text-destructive mt-1">{errorsBe.name.message}</p>
-                  )}
+              
+              {/* Basic Information */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-border/50">
+                  <FileText className="w-4 h-4 text-muted-foreground" />
+                  <Label className="text-base font-semibold">Thông tin cơ bản</Label>
                 </div>
-                <div>
-                  <Label htmlFor="be-tech">Technology <span className="text-destructive">*</span></Label>
-                  <Controller
-                    name="tech"
-                    control={controlBe}
-                    render={({ field }) => (
-                      <Select value={field.value} onValueChange={field.onChange} disabled={isDeployingBackend}>
-                        <SelectTrigger id="be-tech">
-                          <SelectValue placeholder="Chọn technology" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="spring">Spring Boot</SelectItem>
-                          <SelectItem value="node">Node.js</SelectItem>
-                        </SelectContent>
-                  </Select>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="be-name" className="text-sm font-medium">
+                      Tên Backend <span className="text-destructive">*</span>
+                    </Label>
+                    <Input 
+                      id="be-name" 
+                      {...registerBe("name")} 
+                      placeholder="api-service" 
+                      disabled={isDeployingBackend}
+                      className="mt-1.5"
+                    />
+                    {errorsBe.name && (
+                      <p className="text-sm text-destructive mt-1">{errorsBe.name.message}</p>
                     )}
-                  />
-                  {errorsBe.tech && (
-                    <p className="text-sm text-destructive mt-1">{errorsBe.tech.message}</p>
-                  )}
+                  </div>
+                  <div>
+                    <Label htmlFor="be-tech" className="text-sm font-medium">
+                      Framework <span className="text-destructive">*</span>
+                    </Label>
+                    <Controller
+                      name="tech"
+                      control={controlBe}
+                      render={({ field }) => (
+                        <Select value={field.value} onValueChange={field.onChange}>
+                          <SelectTrigger id="be-tech" disabled={isDeployingBackend} className="mt-1.5">
+                            <SelectValue placeholder="Chọn technology" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="spring">Spring Boot</SelectItem>
+                            <SelectItem value="node">Node.js</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                    {errorsBe.tech && (
+                      <p className="text-sm text-destructive mt-1">{errorsBe.tech.message}</p>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              <div>
-                <Label>Nguồn mã nguồn <span className="text-destructive">*</span></Label>
-                <div className="flex gap-2 mt-2">
+              {/* Source Type */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-border/50">
+                  <Package className="w-4 h-4 text-muted-foreground" />
+                  <Label className="text-base font-semibold">
+                    Nguồn mã nguồn <span className="text-destructive">*</span>
+                  </Label>
+                </div>
+                <div className="flex gap-2">
                   <Button
                     type="button"
                     variant={sourceTypeBe === "zip" ? "default" : "outline"}
                     onClick={() => setValueBe("sourceKind", "zip")}
                     disabled={isDeployingBackend}
+                    className="flex-1"
                   >
+                    <Upload className="w-4 h-4 mr-2" />
                     Upload ZIP
                   </Button>
                   <Button
@@ -2480,44 +3158,56 @@ export function ProjectDetail() {
                     variant={sourceTypeBe === "image" ? "default" : "outline"}
                     onClick={() => setValueBe("sourceKind", "image")}
                     disabled={isDeployingBackend}
+                    className="flex-1"
                   >
+                    <Package className="w-4 h-4 mr-2" />
                     Docker Image
                   </Button>
                 </div>
               </div>
 
               {sourceTypeBe === "zip" ? (
-                <div>
-                  <Label>File ZIP <span className="text-destructive">*</span></Label>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">
+                    File ZIP <span className="text-destructive">*</span>
+                  </Label>
                   <div
-                    className={`mt-2 border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+                    className={`border-2 border-dashed rounded-lg p-8 text-center transition-all ${
                       isDeployingBackend 
-                        ? "opacity-50 cursor-not-allowed" 
-                        : "cursor-pointer hover:bg-muted"
+                        ? "opacity-50 cursor-not-allowed border-muted-foreground/30" 
+                        : "cursor-pointer hover:bg-muted/50 hover:border-primary/50 border-border"
                     }`}
                     onClick={() => !isDeployingBackend && document.getElementById("zip-input-be-modal")?.click()}
                   >
                     {zipFileBe ? (
-                      <div>
-                        <p className="font-medium">{zipFileBe.name}</p>
+                      <div className="space-y-3">
+                        <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-green-100 dark:bg-green-950/30">
+                          <CheckCircle2 className="w-6 h-6 text-green-600 dark:text-green-400" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-sm">{zipFileBe.name}</p>
+                        </div>
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
-                          className="mt-2"
                           onClick={(e) => {
                             e.stopPropagation()
                             setZipFileBe(null)
                             setZipErrorBe("")
                           }}
+                          disabled={isDeployingBackend}
                         >
+                          <X className="w-3 h-3 mr-1" />
                           Xóa file
                         </Button>
                       </div>
                     ) : (
-                      <div>
-                        <Upload className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
-                        <p className="text-sm">Chọn file ZIP</p>
+                      <div className="space-y-2">
+                        <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-muted">
+                          <Upload className="w-6 h-6 text-muted-foreground" />
+                        </div>
+                        <p className="text-sm font-medium">Chọn file ZIP</p>
                       </div>
                     )}
                   </div>
@@ -2545,13 +3235,15 @@ export function ProjectDetail() {
                   )}
                 </div>
               ) : (
-                <div>
-                  <Label htmlFor="be-source-ref">Docker Image <span className="text-destructive">*</span></Label>
+                <div className="space-y-2">
+                  <Label htmlFor="be-source-ref" className="text-sm font-medium">
+                    Docker Image <span className="text-destructive">*</span>
+                  </Label>
                   <Input
                     id="be-source-ref"
                     {...registerBe("sourceRef")}
                     placeholder="docker.io/user/app:1.0.0"
-                    className="font-mono"
+                    className="font-mono mt-1.5"
                     onBlur={validateDockerBe}
                     disabled={isDeployingBackend}
                   />
@@ -2561,132 +3253,256 @@ export function ProjectDetail() {
                 </div>
               )}
 
-              <div>
-                <Label htmlFor="be-dns">DNS (tùy chọn)</Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="be-dns"
-                    {...registerBe("dns")}
-                    placeholder="api-myapp"
-                    className={`flex-1 ${
-                      dnsStatusBe === "valid"
-                        ? "border-green-500 focus-visible:ring-green-500"
-                        : dnsStatusBe === "invalid"
-                        ? "border-red-500 focus-visible:ring-red-500 text-red-600"
-                        : ""
-                    }`}
-                    disabled={isDeployingBackend}
-                    onBlur={validateDNSBe}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={isDeployingBackend || isCheckingDnsBe}
-                    onClick={handleCheckDnsBe}
-                  >
-                    {isCheckingDnsBe ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Đang kiểm tra...
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 className="w-4 h-4 mr-2" />
-                        Kiểm tra
-                      </>
-                    )}
-                  </Button>
+              {/* Domain Name */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-border/50">
+                  <Globe className="w-4 h-4 text-muted-foreground" />
+                  <Label className="text-base font-semibold">Domain Name (Tùy chọn)</Label>
                 </div>
-                {dnsMessageBe && (
-                  <p
-                    className={`text-sm mt-1 ${
-                      dnsStatusBe === "valid"
-                        ? "text-green-600"
-                        : dnsStatusBe === "invalid"
-                        ? "text-red-600"
-                        : "text-muted-foreground"
-                    }`}
-                  >
-                    {dnsMessageBe}
-                  </p>
-                )}
+                <div>
+                  <Label htmlFor="be-dns" className="text-sm font-medium">Domain Name</Label>
+                  <div className="flex gap-2 mt-1.5">
+                    <Input
+                      id="be-dns"
+                      {...registerBe("dns")}
+                      placeholder="api-myapp"
+                      className={`flex-1 ${
+                        dnsStatusBe === "valid"
+                          ? "border-green-500 focus-visible:ring-green-500"
+                          : dnsStatusBe === "invalid"
+                          ? "border-red-500 focus-visible:ring-red-500 text-red-600"
+                          : ""
+                      }`}
+                      disabled={isDeployingBackend}
+                      onBlur={validateDNSBe}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={isDeployingBackend || isCheckingDnsBe}
+                      onClick={handleCheckDnsBe}
+                    >
+                      {isCheckingDnsBe ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Đang kiểm tra...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-4 h-4 mr-2" />
+                          Kiểm tra
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  {dnsMessageBe && (
+                    <p
+                      className={`text-sm mt-1 ${
+                        dnsStatusBe === "valid"
+                          ? "text-green-600"
+                          : dnsStatusBe === "invalid"
+                          ? "text-red-600"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      {dnsMessageBe}
+                    </p>
+                  )}
+                </div>
               </div>
 
               {/* Database connection fields */}
-              <div className="p-4 bg-muted rounded-lg space-y-4">
-                <div>
-                  <Label className="text-sm font-medium mb-2 block">
+              <div className="p-5 bg-muted/50 rounded-lg border border-border/50 space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-border/50">
+                  <Database className="w-4 h-4 text-muted-foreground" />
+                  <Label className="text-base font-semibold">
                     Kết nối Database
                   </Label>
-                  <p className="text-xs text-muted-foreground mb-3">
-                    Nhập thông tin kết nối database cho backend
-                  </p>
                 </div>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-12 gap-4">
-                    <div className="col-span-5">
-                      <Label htmlFor="be-dbName">
-                        Tên Database
-                      </Label>
-                      <Input
-                        id="be-dbName"
-                        {...registerBe("dbName")}
-                        placeholder="my_database"
-                        disabled={isDeployingBackend}
-                      />
+                <p className="text-xs text-muted-foreground mb-1">
+                  Chọn cách nhập thông tin kết nối database
+                </p>
+
+                {/* Chọn chế độ: Nhập thủ công hoặc Chọn từ danh sách */}
+                <div className="flex gap-2 mb-4">
+                  <Button
+                    type="button"
+                    variant={dbConnectionModeBe === "manual" ? "default" : "outline"}
+                    onClick={() => handleModeChangeBe("manual")}
+                    size="sm"
+                    disabled={isDeployingBackend}
+                  >
+                    Nhập thủ công
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={dbConnectionModeBe === "select" ? "default" : "outline"}
+                    onClick={() => handleModeChangeBe("select")}
+                    size="sm"
+                    disabled={isDeployingBackend}
+                  >
+                    Chọn từ danh sách {projectDatabases.length > 0 && `(${projectDatabases.length})`}
+                  </Button>
+                </div>
+
+                {dbConnectionModeBe === "select" ? (
+                  <div className="space-y-4">
+                    {loadingDatabasesBe ? (
+                      <div className="flex items-center justify-center py-4">
+                        <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                        <span className="ml-2 text-sm text-muted-foreground">Đang tải danh sách databases...</span>
+                      </div>
+                    ) : projectDatabases.length > 0 ? (
+                      <>
+                        <div>
+                          <Label htmlFor="select-db-be">Chọn Database đã triển khai ở bước trước</Label>
+                          <Select
+                            value={selectedDbIdBe}
+                            onValueChange={(value) => {
+                              handleSelectDatabaseBe(value)
+                            }}
+                          >
+                            <SelectTrigger id="select-db-be" disabled={isDeployingBackend}>
+                              <SelectValue placeholder="-- Chọn database --">
+                                {selectedDbIdBe ? (() => {
+                                  const selectedDb = projectDatabases.find((db) => String(db.id) === selectedDbIdBe)
+                                  if (!selectedDb) return "-- Chọn database --"
+                                  const dbType = selectedDb.databaseType === "MYSQL" ? "MySQL" : selectedDb.databaseType === "MONGODB" ? "MongoDB" : selectedDb.databaseType
+                                  return `${selectedDb.projectName} (${dbType})${selectedDb.databaseName ? ` - ${selectedDb.databaseName}` : ""}`
+                                })() : "-- Chọn database --"}
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                            {projectDatabases.map((db) => (
+                                <SelectItem key={db.id} value={String(db.id)}>
+                                {db.projectName} ({db.databaseType === "MYSQL" ? "MySQL" : db.databaseType === "MONGODB" ? "MongoDB" : db.databaseType})
+                                {db.databaseName && ` - ${db.databaseName}`}
+                                </SelectItem>
+                            ))}
+                            </SelectContent>
+                          </Select>
+                          {selectedDbIdBe && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Đã chọn: {projectDatabases.find((db) => String(db.id) === selectedDbIdBe)?.projectName}
+                            </p>
+                          )}
+                        </div>
+                        {/* Hiển thị thông tin đã chọn (read-only) */}
+                        {selectedDbIdBe && projectDatabases.find((db) => String(db.id) === selectedDbIdBe) && (() => {
+                          const selectedDb = projectDatabases.find((db) => String(db.id) === selectedDbIdBe)!
+                          return (
+                            <div className="p-3 bg-background rounded-md border space-y-2">
+                              <div className="grid grid-cols-12 gap-4">
+                                <div className="col-span-5">
+                                  <Label className="text-xs text-muted-foreground">Tên Database</Label>
+                                  <p className="text-sm font-medium">
+                                    {selectedDb.databaseName || "-"}
+                                  </p>
+                                </div>
+                                <div className="col-span-5">
+                                  <Label className="text-xs text-muted-foreground">IP/Host Database</Label>
+                                  <p className="text-sm font-medium">
+                                    {selectedDb.databaseIp || "-"}
+                                  </p>
+                                </div>
+                                <div className="col-span-2">
+                                  <Label className="text-xs text-muted-foreground">Port</Label>
+                                  <p className="text-sm font-medium">
+                                    {selectedDb.databasePort || "-"}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                  <Label className="text-xs text-muted-foreground">Username</Label>
+                                  <p className="text-sm font-medium">
+                                    {selectedDb.databaseUsername || "-"}
+                                  </p>
+                                </div>
+                                <div>
+                                  <Label className="text-xs text-muted-foreground">Password</Label>
+                                  <p className="text-sm font-medium">
+                                    {selectedDb.databasePassword ? "••••••••" : "-"}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })()}
+                      </>
+                    ) : (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        Chưa có database nào. Vui lòng thêm database ở bước trước.
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-12 gap-4">
+                      <div className="col-span-5">
+                        <Label htmlFor="be-dbName">
+                          Tên Database
+                        </Label>
+                        <Input
+                          id="be-dbName"
+                          {...registerBe("dbName")}
+                          placeholder="my_database"
+                          disabled={isDeployingBackend}
+                        />
+                      </div>
+                      <div className="col-span-5">
+                        <Label htmlFor="be-dbIp">
+                          IP/Host Database
+                        </Label>
+                        <Input
+                          id="be-dbIp"
+                          {...registerBe("dbIp")}
+                          placeholder="192.168.1.100"
+                          disabled={isDeployingBackend}
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <Label htmlFor="be-dbPort">
+                          Port
+                        </Label>
+                        <Input
+                          id="be-dbPort"
+                          {...registerBe("dbPort")}
+                          placeholder="3306"
+                          disabled={isDeployingBackend}
+                        />
+                      </div>
                     </div>
-                    <div className="col-span-5">
-                      <Label htmlFor="be-dbIp">
-                        IP/Host Database
-                      </Label>
-                      <Input
-                        id="be-dbIp"
-                        {...registerBe("dbIp")}
-                        placeholder="192.168.1.100"
-                        disabled={isDeployingBackend}
-                      />
-                    </div>
-                    <div className="col-span-2">
-                      <Label htmlFor="be-dbPort">
-                        Port
-                      </Label>
-                      <Input
-                        id="be-dbPort"
-                        {...registerBe("dbPort")}
-                        placeholder="3306"
-                        disabled={isDeployingBackend}
-                      />
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="be-dbUsername">
+                          Username Database
+                        </Label>
+                        <Input
+                          id="be-dbUsername"
+                          {...registerBe("dbUsername")}
+                          placeholder="admin"
+                          disabled={isDeployingBackend}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="be-dbPassword">
+                          Password Database
+                        </Label>
+                        <Input
+                          id="be-dbPassword"
+                          type="password"
+                          {...registerBe("dbPassword")}
+                          placeholder="••••••••"
+                          disabled={isDeployingBackend}
+                        />
+                      </div>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="be-dbUsername">
-                        Username Database
-                      </Label>
-                      <Input
-                        id="be-dbUsername"
-                        {...registerBe("dbUsername")}
-                        placeholder="admin"
-                        disabled={isDeployingBackend}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="be-dbPassword">
-                        Password Database
-                      </Label>
-                      <Input
-                        id="be-dbPassword"
-                        type="password"
-                        {...registerBe("dbPassword")}
-                        placeholder="••••••••"
-                        disabled={isDeployingBackend}
-                      />
-                    </div>
-                  </div>
-                </div>
+                )}
               </div>
 
-              <div className="flex justify-end gap-2">
+              <div className="flex justify-end gap-3 pt-4 border-t border-border/50">
                 <Button
                   type="button"
                   variant="outline"
@@ -2695,19 +3511,24 @@ export function ProjectDetail() {
                     resetBe()
                     setZipFileBe(null)
                     setZipErrorBe("")
+                    setDbConnectionModeBe("manual")
+                    setSelectedDbIdBe("")
                   }}
                   disabled={isDeployingBackend}
                 >
                   Hủy
                 </Button>
-                <Button type="submit" disabled={isDeployingBackend}>
+                <Button type="submit" disabled={isDeployingBackend} className="min-w-[140px]">
                   {isDeployingBackend ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                       Đang triển khai...
                     </>
                   ) : (
-                    "Thêm Backend"
+                    <>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Thêm Backend
+                    </>
                   )}
                 </Button>
               </div>
@@ -3018,29 +3839,34 @@ export function ProjectDetail() {
         {/* Dialog thêm Frontend */}
         <Dialog open={showAddFrontend} onOpenChange={setShowAddFrontend}>
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Thêm Frontend</DialogTitle>
-              <DialogDescription>
-                Thêm frontend mới vào project
+            <DialogHeader className="pb-4 border-b border-border/50">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-2 rounded-lg bg-green-100 dark:bg-green-950/30">
+                  <Globe className="w-5 h-5 text-green-600 dark:text-green-400" />
+                </div>
+                <DialogTitle className="text-xl">Thêm Frontend</DialogTitle>
+              </div>
+              <DialogDescription className="text-sm mt-1">
+                Tạo và triển khai frontend application mới cho dự án của bạn
               </DialogDescription>
             </DialogHeader>
             
             <HintBox title="Hướng dẫn">
               <ul className="list-disc list-inside space-y-1 text-sm">
-                <li>Chọn React, Vue hoặc Angular</li>
+                <li><strong>Chọn Framework:</strong> React, Vue hoặc Angular</li>
                 <li>
                   <strong>Upload ZIP:</strong> Tên thư mục gốc trùng với tên dự án
                 </li>
                 <li>
-                  <strong>Docker Image:</strong> Định dạng <code className="bg-muted px-1 rounded">owner/name:tag</code>
+                  <strong>Docker Image:</strong> Phải có file Dockerfile trong thư mục gốc
                 </li>
                 <li>
-                  <strong>DNS:</strong> Chỉ a-z, 0-9, '-', dài 3-63 ký tự, không bắt đầu/kết thúc bằng '-' (ví dụ: <code className="bg-muted px-1 rounded">fe.myapp.local.test</code>)
+                  <strong>Domain Name:</strong> Không chứa ký tự đặc biệt, không bắt đầu/kết thúc bằng '-' (ví dụ: <code className="bg-muted px-1 rounded">fe.myapp.local.test</code>)
                 </li>
               </ul>
             </HintBox>
             
-            <form onSubmit={handleSubmitFe(onSubmitFrontend)} className="space-y-4">
+            <form onSubmit={handleSubmitFe(onSubmitFrontend)} className="space-y-6 mt-6">
               {isDeployingFrontend && (
                 <div className="p-4 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
                   <div className="flex items-center gap-2">
@@ -3054,47 +3880,74 @@ export function ProjectDetail() {
                   </p>
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="fe-name">Tên Frontend <span className="text-destructive">*</span></Label>
-                  <Input id="fe-name" {...registerFe("name")} placeholder="web-app" disabled={isDeployingFrontend} />
-                  {errorsFe.name && (
-                    <p className="text-sm text-destructive mt-1">{errorsFe.name.message}</p>
-                  )}
+              
+              {/* Basic Information */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-border/50">
+                  <FileText className="w-4 h-4 text-muted-foreground" />
+                  <Label className="text-base font-semibold">Thông tin cơ bản</Label>
                 </div>
-                <div>
-                  <Label htmlFor="fe-tech">Technology <span className="text-destructive">*</span></Label>
-                  <Controller
-                    name="tech"
-                    control={controlFe}
-                    render={({ field }) => (
-                      <Select value={field.value} onValueChange={field.onChange} disabled={isDeployingFrontend}>
-                        <SelectTrigger id="fe-tech">
-                          <SelectValue placeholder="Chọn technology" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="react">React</SelectItem>
-                          <SelectItem value="vue">Vue</SelectItem>
-                          <SelectItem value="angular">Angular</SelectItem>
-                        </SelectContent>
-                  </Select>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="fe-name" className="text-sm font-medium">
+                      Tên Frontend <span className="text-destructive">*</span>
+                    </Label>
+                    <Input 
+                      id="fe-name" 
+                      {...registerFe("name")} 
+                      placeholder="web-app" 
+                      disabled={isDeployingFrontend}
+                      className="mt-1.5"
+                    />
+                    {errorsFe.name && (
+                      <p className="text-sm text-destructive mt-1">{errorsFe.name.message}</p>
                     )}
-                  />
-                  {errorsFe.tech && (
-                    <p className="text-sm text-destructive mt-1">{errorsFe.tech.message}</p>
-                  )}
+                  </div>
+                  <div>
+                    <Label htmlFor="fe-tech" className="text-sm font-medium">
+                      Framework <span className="text-destructive">*</span>
+                    </Label>
+                    <Controller
+                      name="tech"
+                      control={controlFe}
+                      render={({ field }) => (
+                        <Select value={field.value} onValueChange={field.onChange}>
+                          <SelectTrigger id="fe-tech" disabled={isDeployingFrontend} className="mt-1.5">
+                            <SelectValue placeholder="Chọn technology" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="react">React</SelectItem>
+                            <SelectItem value="vue">Vue</SelectItem>
+                            <SelectItem value="angular">Angular</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                    {errorsFe.tech && (
+                      <p className="text-sm text-destructive mt-1">{errorsFe.tech.message}</p>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              <div>
-                <Label>Nguồn mã nguồn <span className="text-destructive">*</span></Label>
-                <div className="flex gap-2 mt-2">
+              {/* Source Type */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-border/50">
+                  <Package className="w-4 h-4 text-muted-foreground" />
+                  <Label className="text-base font-semibold">
+                    Nguồn mã nguồn <span className="text-destructive">*</span>
+                  </Label>
+                </div>
+                <div className="flex gap-2">
                   <Button
                     type="button"
                     variant={sourceTypeFe === "zip" ? "default" : "outline"}
                     onClick={() => setValueFe("sourceKind", "zip")}
                     disabled={isDeployingFrontend}
+                    className="flex-1"
                   >
+                    <Upload className="w-4 h-4 mr-2" />
                     Upload ZIP
                   </Button>
                   <Button
@@ -3102,29 +3955,39 @@ export function ProjectDetail() {
                     variant={sourceTypeFe === "image" ? "default" : "outline"}
                     onClick={() => setValueFe("sourceKind", "image")}
                     disabled={isDeployingFrontend}
+                    className="flex-1"
                   >
+                    <Package className="w-4 h-4 mr-2" />
                     Docker Image
                   </Button>
                 </div>
               </div>
 
               {sourceTypeFe === "zip" ? (
-                <div>
-                  <Label>File ZIP <span className="text-destructive">*</span></Label>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">
+                    File ZIP <span className="text-destructive">*</span>
+                  </Label>
                   <div
-                    className={`mt-2 border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
-                      isDeployingFrontend ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-muted"
+                    className={`border-2 border-dashed rounded-lg p-8 text-center transition-all ${
+                      isDeployingFrontend 
+                        ? "opacity-50 cursor-not-allowed border-muted-foreground/30" 
+                        : "cursor-pointer hover:bg-muted/50 hover:border-primary/50 border-border"
                     }`}
                     onClick={() => !isDeployingFrontend && document.getElementById("zip-input-fe-modal")?.click()}
                   >
                     {zipFileFe ? (
-                      <div>
-                        <p className="font-medium">{zipFileFe.name}</p>
+                      <div className="space-y-3">
+                        <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-green-100 dark:bg-green-950/30">
+                          <CheckCircle2 className="w-6 h-6 text-green-600 dark:text-green-400" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-sm">{zipFileFe.name}</p>
+                        </div>
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
-                          className="mt-2"
                           onClick={(e) => {
                             e.stopPropagation()
                             setZipFileFe(null)
@@ -3132,13 +3995,16 @@ export function ProjectDetail() {
                           }}
                           disabled={isDeployingFrontend}
                         >
+                          <X className="w-3 h-3 mr-1" />
                           Xóa file
                         </Button>
                       </div>
                     ) : (
-                      <div>
-                        <Upload className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
-                        <p className="text-sm">Chọn file ZIP</p>
+                      <div className="space-y-2">
+                        <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-muted">
+                          <Upload className="w-6 h-6 text-muted-foreground" />
+                        </div>
+                        <p className="text-sm font-medium">Chọn file ZIP</p>
                       </div>
                     )}
                   </div>
@@ -3166,13 +4032,15 @@ export function ProjectDetail() {
                   )}
                 </div>
               ) : (
-                <div>
-                  <Label htmlFor="fe-source-ref">Docker Image <span className="text-destructive">*</span></Label>
+                <div className="space-y-2">
+                  <Label htmlFor="fe-source-ref" className="text-sm font-medium">
+                    Docker Image <span className="text-destructive">*</span>
+                  </Label>
                   <Input
                     id="fe-source-ref"
                     {...registerFe("sourceRef")}
                     placeholder="docker.io/user/app:1.0.0"
-                    className="font-mono"
+                    className="font-mono mt-1.5"
                     onBlur={validateDockerFe}
                     disabled={isDeployingFrontend}
                   />
@@ -3182,58 +4050,65 @@ export function ProjectDetail() {
                 </div>
               )}
 
-              <div>
-                <Label htmlFor="fe-public-url">DNS (tùy chọn)</Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="fe-public-url"
-                    {...registerFe("publicUrl")}
-                    placeholder="fe-myapp"
-                    onBlur={validateDNSPublicUrl}
-                    className={`flex-1 ${
-                      dnsStatusFe === "valid"
-                        ? "border-green-500 focus-visible:ring-green-500"
-                        : dnsStatusFe === "invalid"
-                        ? "border-red-500 focus-visible:ring-red-500 text-red-600"
-                        : ""
-                    }`}
-                    disabled={isDeployingFrontend}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleCheckDnsFe}
-                    disabled={isDeployingFrontend || isCheckingDnsFe}
-                  >
-                    {isCheckingDnsFe ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Đang kiểm tra...
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 className="w-4 h-4 mr-2" />
-                        Kiểm tra
-                      </>
-                    )}
-                  </Button>
+              {/* Domain Name */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-border/50">
+                  <Globe className="w-4 h-4 text-muted-foreground" />
+                  <Label className="text-base font-semibold">Domain Name (Tùy chọn)</Label>
                 </div>
-                {dnsMessageFe && (
-                  <p
-                    className={`text-sm mt-1 ${
-                      dnsStatusFe === "valid"
-                        ? "text-green-600"
-                        : dnsStatusFe === "invalid"
-                        ? "text-red-600"
-                        : "text-muted-foreground"
-                    }`}
-                  >
-                    {dnsMessageFe}
-                  </p>
-                )}
+                <div>
+                  <Label htmlFor="fe-public-url" className="text-sm font-medium">Domain Name</Label>
+                  <div className="flex gap-2 mt-1.5">
+                    <Input
+                      id="fe-public-url"
+                      {...registerFe("publicUrl")}
+                      placeholder="fe-myapp"
+                      onBlur={validateDNSPublicUrl}
+                      className={`flex-1 ${
+                        dnsStatusFe === "valid"
+                          ? "border-green-500 focus-visible:ring-green-500"
+                          : dnsStatusFe === "invalid"
+                          ? "border-red-500 focus-visible:ring-red-500 text-red-600"
+                          : ""
+                      }`}
+                      disabled={isDeployingFrontend}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleCheckDnsFe}
+                      disabled={isDeployingFrontend || isCheckingDnsFe}
+                    >
+                      {isCheckingDnsFe ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Đang kiểm tra...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-4 h-4 mr-2" />
+                          Kiểm tra
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  {dnsMessageFe && (
+                    <p
+                      className={`text-sm mt-1 ${
+                        dnsStatusFe === "valid"
+                          ? "text-green-600"
+                          : dnsStatusFe === "invalid"
+                          ? "text-red-600"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      {dnsMessageFe}
+                    </p>
+                  )}
+                </div>
               </div>
 
-              <div className="flex justify-end gap-2">
+              <div className="flex justify-end gap-3 pt-4 border-t border-border/50">
                 <Button
                   type="button"
                   variant="outline"
@@ -3247,8 +4122,18 @@ export function ProjectDetail() {
                 >
                   Hủy
                 </Button>
-                <Button type="submit" disabled={isDeployingFrontend}>
-                  {isDeployingFrontend ? "Đang triển khai..." : "Thêm Frontend"}
+                <Button type="submit" disabled={isDeployingFrontend} className="min-w-[140px]">
+                  {isDeployingFrontend ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Đang triển khai...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Thêm Frontend
+                    </>
+                  )}
                 </Button>
               </div>
             </form>
@@ -3328,4 +4213,5 @@ export function ProjectDetail() {
     </div>
   )
 }
+
 

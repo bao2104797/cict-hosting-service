@@ -129,8 +129,7 @@ export function StepProjectInfo() {
       {/* Hướng dẫn */}
       <HintBox title="Hướng dẫn">
         <ul className="list-disc list-inside space-y-1 text-sm">
-          <li>Tên project sẽ được dùng để hiển thị trong danh sách và URL</li>
-          <li>Tên project nên ngắn gọn, dễ nhớ và mô tả rõ mục đích của project</li>
+          <li>Tên project nên ngắn gọn, dễ nhớ sẽ được dùng để hiển thị trong danh sách</li>
           <li>Mô tả là tùy chọn, nhưng nên điền để dễ quản lý sau này</li>
         </ul>
       </HintBox>

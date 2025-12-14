@@ -310,15 +310,15 @@ export function StepFrontend() {
 
       <HintBox title="Hướng dẫn">
         <ul className="list-disc list-inside space-y-1 text-sm">
-          <li>Chọn React, Vue hoặc Angular</li>
+          <li><strong>Chọn Framework:</strong> React, Vue hoặc Angular</li>
           <li>
             <strong>Upload ZIP:</strong> Tên thư mục gốc trùng với tên dự án
           </li>
           <li>
-            <strong>Docker Image:</strong> Định dạng <code className="bg-muted px-1 rounded">owner/name:tag</code>
+            <strong>Docker Image:</strong> Phải có file Dockerfile trong thư mục gốc
           </li>
           <li>
-            <strong>DNS:</strong> Chỉ a-z, 0-9, '-', dài 3-63 ký tự, không bắt đầu/kết thúc bằng '-' (ví dụ: <code className="bg-muted px-1 rounded">fe.myapp.local.test</code>)
+            <strong>Domain Name:</strong> Không chứa ký tự đặc biệt, không bắt đầu/kết thúc bằng '-' (ví dụ: <code className="bg-muted px-1 rounded">fe.myapp.local.test</code>)
           </li>
         </ul>
       </HintBox>
@@ -365,7 +365,19 @@ export function StepFrontend() {
                             </div>
                             {fe.domainNameSystem && (
                               <div>
-                                <span className="font-medium">DNS:</span> {fe.domainNameSystem}
+                                <span className="font-medium">Domain Name:</span>{" "}
+                                <a
+                                  href={`http://${fe.domainNameSystem}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 underline cursor-pointer"
+                                  onClick={(e) => {
+                                    e.preventDefault()
+                                    window.open(`http://${fe.domainNameSystem}`, '_blank')
+                                  }}
+                                >
+                                  {fe.domainNameSystem}
+                                </a>
                               </div>
                             )}
                           </div>
