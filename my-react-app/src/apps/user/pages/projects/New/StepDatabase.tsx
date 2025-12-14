@@ -2,7 +2,7 @@ import { useState, useEffect } from "react"
 import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
-import { Upload, X, Plus, Loader2, Eye, EyeOff, Trash2 } from "lucide-react"
+import { Upload, X, Plus, Loader2, Eye, EyeOff, Trash2, Database, FileText, Package, CheckCircle2, Network, HardDrive, User, Key, Copy, Check } from "lucide-react"
 import { motion } from "framer-motion"
 import type { DatabaseFormData } from "@/types"
 import { validateZipFile, validateIP, validatePort } from "@/lib/validators"
@@ -44,6 +44,7 @@ export function StepDatabase() {
   const [projectDatabases, setProjectDatabases] = useState<DatabaseInfo[]>([])
   const [loadingDatabases, setLoadingDatabases] = useState(false)
   const [showPasswords, setShowPasswords] = useState<Record<number, boolean>>({})
+  const [copiedField, setCopiedField] = useState<string | null>(null)
   const [deletingDatabaseId, setDeletingDatabaseId] = useState<number | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string; type: "api" | "store"; storeIndex?: number } | null>(null)
 
@@ -253,41 +254,56 @@ export function StepDatabase() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-foreground mb-2">
-          Bước 2/5 — Cấu hình Database
-        </h2>
-        <p className="text-muted-foreground">
-          Thiết lập các database cho project của bạn
-        </p>
+      <div className="flex items-center gap-3 mb-2">
+        <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-950/30">
+          <Database className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+        </div>
+        <div>
+          <h2 className="text-2xl font-bold text-foreground">
+            Bước 2/5 — Cấu hình Database
+          </h2>
+          <p className="text-muted-foreground mt-1">
+            Thiết lập các database cho project của bạn
+          </p>
+        </div>
       </div>
 
       {/* Hướng dẫn */}
       <HintBox title="Hướng dẫn">
         <ul className="list-disc list-inside space-y-1 text-sm">
-          <li>Chọn loại database: MySQL hoặc MongoDB</li>
+          <li><strong>Chọn loại database:</strong> MySQL hoặc MongoDB</li>
           <li>
-            Hệ thống sẽ tự động tạo và quản lý database (chỉ thao tác qua ứng dụng, không cấp quyền đăng nhập DB)
+            <strong>Hệ thống sẽ tự động tạo và quản lý database</strong>
           </li>
           <li>
-            Upload file ZIP: Chỉ nhận tệp .zip. Khi giải nén, tên thư mục gốc phải trùng với tên database
+            <strong>Upload file ZIP:</strong> Chỉ nhận tệp .zip. Khi giải nén, tên thư mục gốc phải trùng với tên database
           </li>
-          <li>Ví dụ cấu trúc: <code className="bg-muted px-1 rounded">my-database/schema.sql</code></li>
+          <li><strong>Ví dụ cấu trúc:</strong> <code className="bg-muted px-1 rounded">my-database.zip (chứa duy nhất 1 file my-database.sql)</code></li>
         </ul>
       </HintBox>
 
       {/* Danh sách databases đã thêm */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Databases đã thêm ({projectDatabases.length > 0 ? projectDatabases.length : databases.length})</CardTitle>
+      <Card className="border-border/50 shadow-sm">
+        <CardHeader className="pb-4 border-b border-border/50 bg-gradient-to-br from-blue-50/50 to-transparent dark:from-blue-950/20">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-950/30">
+              <Database className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+            </div>
+            <CardTitle className="text-xl">
+              Databases đã thêm ({projectDatabases.length > 0 ? projectDatabases.length : databases.length})
+            </CardTitle>
+          </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-6">
           {loadingDatabases ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
             </div>
           ) : projectDatabases.length > 0 ? (
-            <div className="space-y-3">
+            <div 
+              className="space-y-3 max-h-[600px] overflow-y-auto pr-2"
+              style={{ scrollBehavior: 'smooth' }}
+            >
               {projectDatabases.map((db) => (
                 <motion.div
                   key={db.id}
@@ -295,62 +311,27 @@ export function StepDatabase() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.2 }}
                 >
-                  <Card className="border">
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1 space-y-2">
-                          <div>
-                            <h4 className="font-medium">{db.projectName}</h4>
-                            <p className="text-sm text-muted-foreground">
-                              {db.databaseType === "MYSQL" ? "MySQL" : db.databaseType === "MONGODB" ? "MongoDB" : db.databaseType}
+                  <Card className="border border-border/50 hover:shadow-lg transition-all">
+                    <CardContent className="p-5">
+                      {/* Header */}
+                      <div className="flex items-start justify-between gap-4 mb-4 pb-4 border-b border-border/50">
+                        <div className="flex items-start gap-3 flex-1">
+                          <div className={`p-2.5 rounded-lg flex-shrink-0 ${
+                            db.databaseType === "MYSQL" 
+                              ? "bg-orange-100 dark:bg-orange-950/30" 
+                              : "bg-green-100 dark:bg-green-950/30"
+                          }`}>
+                            <Database className={`w-5 h-5 ${
+                              db.databaseType === "MYSQL"
+                                ? "text-orange-600 dark:text-orange-400"
+                                : "text-green-600 dark:text-green-400"
+                            }`} />
+                          </div>
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-base">{db.projectName}</h4>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {db.databaseType === "MYSQL" ? "MySQL Database" : db.databaseType === "MONGODB" ? "MongoDB Database" : db.databaseType}
                             </p>
-                          </div>
-                          
-                          {/* IP, Port, Database Name trên một hàng */}
-                          <div className="grid grid-cols-3 gap-2 text-sm">
-                            <div>
-                              <span className="text-muted-foreground">IP:</span>
-                              <span className="ml-1 font-mono">{db.databaseIp || "-"}</span>
-                            </div>
-                            <div>
-                              <span className="text-muted-foreground">Port:</span>
-                              <span className="ml-1 font-mono">{db.databasePort || "-"}</span>
-                            </div>
-                            <div>
-                              <span className="text-muted-foreground">Database:</span>
-                              <span className="ml-1 font-mono">{db.databaseName || "-"}</span>
-                            </div>
-                          </div>
-                          
-                          {/* Username và Password trên một hàng */}
-                          <div className="grid grid-cols-2 gap-2 text-sm">
-                            <div>
-                              <span className="text-muted-foreground">Username:</span>
-                              <span className="ml-1 font-mono">{db.databaseUsername || "-"}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-muted-foreground">Password:</span>
-                              <span className="font-mono flex-1">
-                                {showPasswords[db.id] ? db.databasePassword || "-" : "••••••••"}
-                              </span>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6"
-                                onClick={() => {
-                                  setShowPasswords((prev) => ({
-                                    ...prev,
-                                    [db.id]: !prev[db.id],
-                                  }))
-                                }}
-                              >
-                                {showPasswords[db.id] ? (
-                                  <EyeOff className="w-4 h-4" />
-                                ) : (
-                                  <Eye className="w-4 h-4" />
-                                )}
-                              </Button>
-                            </div>
                           </div>
                         </div>
                         <Button
@@ -358,14 +339,210 @@ export function StepDatabase() {
                           size="icon"
                           onClick={() => handleDeleteDatabase(db.id, db.projectName || db.databaseName || "")}
                           disabled={deletingDatabaseId === db.id}
-                          className="flex-shrink-0"
+                          className="flex-shrink-0 hover:bg-destructive/10 hover:text-destructive"
                         >
                           {deletingDatabaseId === db.id ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
                           ) : (
-                            <Trash2 className="w-4 h-4 text-destructive" />
+                            <Trash2 className="w-4 h-4" />
                           )}
                         </Button>
+                      </div>
+
+                      {/* Connection Information */}
+                      <div className="space-y-3">
+                        {/* IP and Port */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {db.databaseIp && (
+                            <div className="p-3 bg-muted/50 rounded-lg border border-border/50 flex items-start gap-3">
+                              <div className="p-1.5 rounded-md bg-blue-100 dark:bg-blue-950/30 flex-shrink-0 mt-0.5">
+                                <Network className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                                  IP Address
+                                </Label>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <span className="font-mono text-sm flex-1 truncate">{db.databaseIp}</span>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 flex-shrink-0"
+                                    onClick={async () => {
+                                      await navigator.clipboard.writeText(db.databaseIp || "")
+                                      setCopiedField(`ip-${db.id}`)
+                                      toast.success("Đã sao chép IP address")
+                                      setTimeout(() => setCopiedField(null), 2000)
+                                    }}
+                                  >
+                                    {copiedField === `ip-${db.id}` ? (
+                                      <Check className="w-3.5 h-3.5 text-green-600" />
+                                    ) : (
+                                      <Copy className="w-3.5 h-3.5" />
+                                    )}
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                          
+                          {db.databasePort && (
+                            <div className="p-3 bg-muted/50 rounded-lg border border-border/50 flex items-start gap-3">
+                              <div className="p-1.5 rounded-md bg-purple-100 dark:bg-purple-950/30 flex-shrink-0 mt-0.5">
+                                <Network className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                                  Port
+                                </Label>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <span className="font-mono text-sm flex-1">{db.databasePort}</span>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 flex-shrink-0"
+                                    onClick={async () => {
+                                      await navigator.clipboard.writeText(String(db.databasePort || ""))
+                                      setCopiedField(`port-${db.id}`)
+                                      toast.success("Đã sao chép Port")
+                                      setTimeout(() => setCopiedField(null), 2000)
+                                    }}
+                                  >
+                                    {copiedField === `port-${db.id}` ? (
+                                      <Check className="w-3.5 h-3.5 text-green-600" />
+                                    ) : (
+                                      <Copy className="w-3.5 h-3.5" />
+                                    )}
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Database Name */}
+                        {db.databaseName && (
+                          <div className="p-3 bg-muted/50 rounded-lg border border-border/50 flex items-start gap-3">
+                            <div className="p-1.5 rounded-md bg-amber-100 dark:bg-amber-950/30 flex-shrink-0 mt-0.5">
+                              <HardDrive className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                                Database Name
+                              </Label>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="font-mono text-sm flex-1 truncate">{db.databaseName}</span>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 flex-shrink-0"
+                                  onClick={async () => {
+                                    await navigator.clipboard.writeText(db.databaseName || "")
+                                    setCopiedField(`dbname-${db.id}`)
+                                    toast.success("Đã sao chép Database Name")
+                                    setTimeout(() => setCopiedField(null), 2000)
+                                  }}
+                                >
+                                  {copiedField === `dbname-${db.id}` ? (
+                                    <Check className="w-3.5 h-3.5 text-green-600" />
+                                  ) : (
+                                    <Copy className="w-3.5 h-3.5" />
+                                  )}
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Username and Password */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {db.databaseUsername && (
+                            <div className="p-3 bg-muted/50 rounded-lg border border-border/50 flex items-start gap-3">
+                              <div className="p-1.5 rounded-md bg-cyan-100 dark:bg-cyan-950/30 flex-shrink-0 mt-0.5">
+                                <User className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                                  Username
+                                </Label>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <span className="font-mono text-sm flex-1 truncate">{db.databaseUsername}</span>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 flex-shrink-0"
+                                    onClick={async () => {
+                                      await navigator.clipboard.writeText(db.databaseUsername || "")
+                                      setCopiedField(`username-${db.id}`)
+                                      toast.success("Đã sao chép Username")
+                                      setTimeout(() => setCopiedField(null), 2000)
+                                    }}
+                                  >
+                                    {copiedField === `username-${db.id}` ? (
+                                      <Check className="w-3.5 h-3.5 text-green-600" />
+                                    ) : (
+                                      <Copy className="w-3.5 h-3.5" />
+                                    )}
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {db.databasePassword && (
+                            <div className="p-3 bg-muted/50 rounded-lg border border-border/50 flex items-start gap-3">
+                              <div className="p-1.5 rounded-md bg-red-100 dark:bg-red-950/30 flex-shrink-0 mt-0.5">
+                                <Key className="w-3.5 h-3.5 text-red-600 dark:text-red-400" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                                  Password
+                                </Label>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <span className="font-mono text-sm flex-1 truncate">
+                                    {showPasswords[db.id] ? db.databasePassword : "••••••••"}
+                                  </span>
+                                  <div className="flex items-center gap-1 flex-shrink-0">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-6 w-6"
+                                      onClick={async () => {
+                                        await navigator.clipboard.writeText(db.databasePassword || "")
+                                        setCopiedField(`password-${db.id}`)
+                                        toast.success("Đã sao chép Password")
+                                        setTimeout(() => setCopiedField(null), 2000)
+                                      }}
+                                    >
+                                      {copiedField === `password-${db.id}` ? (
+                                        <Check className="w-3.5 h-3.5 text-green-600" />
+                                      ) : (
+                                        <Copy className="w-3.5 h-3.5" />
+                                      )}
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-6 w-6"
+                                      onClick={() => {
+                                        setShowPasswords((prev) => ({
+                                          ...prev,
+                                          [db.id]: !prev[db.id],
+                                        }))
+                                      }}
+                                    >
+                                      {showPasswords[db.id] ? (
+                                        <EyeOff className="w-3.5 h-3.5" />
+                                      ) : (
+                                        <Eye className="w-3.5 h-3.5" />
+                                      )}
+                                    </Button>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
@@ -374,7 +551,10 @@ export function StepDatabase() {
             </div>
           ) : databases.length > 0 ? (
             // Fallback hiển thị từ store nếu API chưa có dữ liệu
-            <div className="space-y-3">
+            <div 
+              className="space-y-3 max-h-[600px] overflow-y-auto pr-2"
+              style={{ scrollBehavior: 'smooth' }}
+            >
               {databases.map((db, index) => (
                 <motion.div
                   key={`${db.name}-${index}-${db.type}`}
@@ -382,19 +562,32 @@ export function StepDatabase() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.2 }}
                 >
-                  <Card className="border">
+                  <Card className="border border-border/50 hover:shadow-md transition-shadow">
                     <CardContent className="p-4">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <h4 className="font-medium">{db.name}</h4>
-                          <p className="text-sm text-muted-foreground">
-                            {db.type === "mysql" ? "MySQL" : "MongoDB"} - Của hệ thống
-                          </p>
-                          {db.databaseName && (
-                            <p className="text-sm text-muted-foreground mt-1">
-                              Database: {db.databaseName}
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex items-start gap-3 flex-1">
+                          <div className={`p-2 rounded-lg flex-shrink-0 ${
+                            db.type === "mysql" 
+                              ? "bg-orange-100 dark:bg-orange-950/30" 
+                              : "bg-green-100 dark:bg-green-950/30"
+                          }`}>
+                            <Database className={`w-4 h-4 ${
+                              db.type === "mysql"
+                                ? "text-orange-600 dark:text-orange-400"
+                                : "text-green-600 dark:text-green-400"
+                            }`} />
+                          </div>
+                          <div className="flex-1">
+                            <h4 className="font-semibold">{db.name}</h4>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {db.type === "mysql" ? "MySQL" : "MongoDB"} - Của hệ thống
                             </p>
-                          )}
+                            {db.databaseName && (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Database: {db.databaseName}
+                              </p>
+                            )}
+                          </div>
                         </div>
                         <Button
                           variant="ghost"
@@ -411,21 +604,34 @@ export function StepDatabase() {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground text-center py-4">
-              Chưa có database nào. Nhấn "Thêm Database" để bắt đầu.
-            </p>
+            <div className="text-center py-8">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-100 dark:bg-blue-950/30 mb-3">
+                <Database className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+              </div>
+              <p className="text-sm font-medium text-muted-foreground mb-1">
+                Chưa có database nào
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Nhấn "Thêm Database" để bắt đầu
+              </p>
+            </div>
           )}
         </CardContent>
       </Card>
 
       {/* Form thêm database */}
       {showForm ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Thêm Database</CardTitle>
+        <Card className="border-border/50 shadow-sm">
+          <CardHeader className="pb-4 border-b border-border/50 bg-gradient-to-br from-blue-50/50 to-transparent dark:from-blue-950/20">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-950/30">
+                <Plus className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <CardTitle className="text-xl">Thêm Database</CardTitle>
+            </div>
           </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <CardContent className="p-6">
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
               {isDeploying && (
                 <div className="p-4 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
                   <div className="flex items-center gap-2">
@@ -439,59 +645,69 @@ export function StepDatabase() {
                   </p>
                 </div>
               )}
-              <div>
-                <Label htmlFor="name">
-                  Tên Database <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="name"
-                  {...register("name")}
-                  placeholder="my-database"
-                  disabled={isDeploying}
-                />
-                {errors.name && (
-                  <p className="text-sm text-destructive mt-1">
-                    {errors.name.message}
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <Label htmlFor="type">
-                  Loại Database <span className="text-destructive">*</span>
-                </Label>
-                <Controller
-                  name="type"
-                  control={control}
-                  render={({ field }) => (
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <SelectTrigger id="type" disabled={isDeploying}>
-                        <SelectValue placeholder="Chọn loại database" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="mysql">MySQL</SelectItem>
-                        <SelectItem value="mongodb">MongoDB</SelectItem>
-                      </SelectContent>
-                    </Select>
+              {/* Basic Information */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-border/50">
+                  <FileText className="w-4 h-4 text-muted-foreground" />
+                  <Label className="text-base font-semibold">Thông tin cơ bản</Label>
+                </div>
+                
+                <div>
+                  <Label htmlFor="name" className="text-sm font-medium">
+                    Tên Dự Án Database <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="name"
+                    {...register("name")}
+                    placeholder="my-database"
+                    disabled={isDeploying}
+                    className="mt-1.5"
+                  />
+                  {errors.name && (
+                    <p className="text-sm text-destructive mt-1">
+                      {errors.name.message}
+                    </p>
                   )}
-                />
-                {errors.type && (
-                  <p className="text-sm text-destructive mt-1">
-                    {errors.type.message}
-                  </p>
-                )}
+                </div>
+
+                <div>
+                  <Label htmlFor="type" className="text-sm font-medium">
+                    Loại Database <span className="text-destructive">*</span>
+                  </Label>
+                  <Controller
+                    name="type"
+                    control={control}
+                    render={({ field }) => (
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <SelectTrigger id="type" disabled={isDeploying} className="mt-1.5">
+                          <SelectValue placeholder="Chọn loại database" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="mysql">MySQL</SelectItem>
+                          <SelectItem value="mongodb">MongoDB</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                  {errors.type && (
+                    <p className="text-sm text-destructive mt-1">
+                      {errors.type.message}
+                    </p>
+                  )}
+                </div>
               </div>
 
               {/* Form fields cho Database connection - chỉ hiển thị cho hệ thống */}
-              <div className="p-4 bg-muted rounded-lg space-y-4">
-                <div>
-                  <Label className="text-sm font-medium mb-2 block">
+              <div className="p-5 bg-muted/50 rounded-lg border border-border/50 space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-border/50">
+                  <Database className="w-4 h-4 text-muted-foreground" />
+                  <Label className="text-base font-semibold">
                     Thông tin Database của hệ thống
                   </Label>
-                  <p className="text-xs text-muted-foreground mb-3">
-                    Nhập thông tin database (tùy chọn cho hệ thống tự quản lý)
-                  </p>
                 </div>
+                <p className="text-xs text-muted-foreground mb-1">
+                  Nhập thông tin database của bạn muốn tạo
+                </p>
                 <div className="space-y-4">
                   <div>
                     <Label htmlFor="databaseName">
@@ -548,79 +764,89 @@ export function StepDatabase() {
               </div>
 
               {/* Upload ZIP */}
-              <div>
-                <Label>Upload file ZIP (tùy chọn)</Label>
-                <div
-                  className={`mt-2 border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
-                    isDeploying ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-muted"
-                  }`}
-                  onClick={() => !isDeploying && document.getElementById("zip-input-db")?.click()}
-                >
-                  {zipFile ? (
-                    <div>
-                      <p className="font-medium">{zipFile.name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {(zipFile.size / 1024 / 1024).toFixed(2)} MB
-                      </p>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="mt-2"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setZipFile(null)
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-border/50">
+                  <Upload className="w-4 h-4 text-muted-foreground" />
+                  <Label className="text-base font-semibold">Upload File (Tùy chọn)</Label>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium mb-1.5 block">
+                    Upload file ZIP (nếu không có file SQL, hệ thống sẽ tạo database rỗng với tên mà bạn nhập)
+                  </Label>
+                  <div
+                    className={`mt-2 border-2 border-dashed rounded-lg p-8 text-center transition-all ${
+                      isDeploying 
+                        ? "opacity-50 cursor-not-allowed border-muted-foreground/30" 
+                        : "cursor-pointer hover:bg-muted/50 hover:border-primary/50 border-border"
+                    }`}
+                    onClick={() => !isDeploying && document.getElementById("zip-input-db")?.click()}
+                  >
+                    {zipFile ? (
+                      <div className="space-y-3">
+                        <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-green-100 dark:bg-green-950/30">
+                          <CheckCircle2 className="w-6 h-6 text-green-600 dark:text-green-400" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-sm">{zipFile.name}</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {(zipFile.size / 1024 / 1024).toFixed(2)} MB
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setZipFile(null)
+                            setZipError("")
+                          }}
+                          disabled={isDeploying}
+                        >
+                          <X className="w-3 h-3 mr-1" />
+                          Xóa file
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-muted">
+                          <Upload className="w-6 h-6 text-muted-foreground" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium">Chọn file hoặc kéo thả vào đây</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            File ZIP, tối đa 100 MB
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <input
+                    id="zip-input-db"
+                    type="file"
+                    accept=".zip"
+                    className="hidden"
+                    disabled={isDeploying}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) {
+                        const validation = validateZipFile(file)
+                        if (validation.valid) {
+                          setZipFile(file)
                           setZipError("")
-                        }}
-                      >
-                        Xóa file
-                      </Button>
-                    </div>
-                  ) : (
-                    <div>
-                      <Upload className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
-                      <p className="text-sm">Chọn file hoặc kéo thả vào đây</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        File ZIP, tối đa 100 MB
-                      </p>
-                    </div>
+                        } else {
+                          setZipError(validation.message || "")
+                        }
+                      }
+                    }}
+                  />
+                  {zipError && (
+                    <p className="text-sm text-destructive mt-1">{zipError}</p>
                   )}
                 </div>
-                <input
-                  id="zip-input-db"
-                  type="file"
-                  accept=".zip"
-                  className="hidden"
-                  disabled={isDeploying}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0]
-                    if (file) {
-                      const validation = validateZipFile(file)
-                      if (validation.valid) {
-                        setZipFile(file)
-                        setZipError("")
-                      } else {
-                        setZipError(validation.message || "")
-                      }
-                    }
-                  }}
-                />
-                {zipError && (
-                  <p className="text-sm text-destructive mt-1">{zipError}</p>
-                )}
               </div>
 
-              <div className="flex gap-2">
-                <Button type="submit" disabled={isDeploying}>
-                  {isDeploying ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Đang triển khai...
-                    </>
-                  ) : (
-                    "Thêm"
-                  )}
-                </Button>
+              <div className="flex justify-end gap-3 pt-4 border-t border-border/50">
                 <Button
                   type="button"
                   variant="outline"
@@ -634,6 +860,19 @@ export function StepDatabase() {
                 >
                   Hủy
                 </Button>
+                <Button type="submit" disabled={isDeploying} className="min-w-[140px]">
+                  {isDeploying ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Đang triển khai...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Thêm Database
+                    </>
+                  )}
+                </Button>
               </div>
             </form>
           </CardContent>
@@ -641,7 +880,7 @@ export function StepDatabase() {
       ) : (
         <Button
           variant="outline"
-          className="w-full"
+          className="w-full h-12"
           onClick={() => setShowForm(true)}
         >
           <Plus className="w-4 h-4 mr-2" />
