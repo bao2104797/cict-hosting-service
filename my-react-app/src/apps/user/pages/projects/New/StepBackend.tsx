@@ -823,7 +823,14 @@ export function StepBackend() {
                             }}
                           >
                             <SelectTrigger id="select-db" disabled={isDeploying}>
-                              <SelectValue placeholder="-- Chọn database --" />
+                              <SelectValue placeholder="-- Chọn database --">
+                                {selectedDbId ? (() => {
+                                  const selectedDb = projectDatabases.find((db) => String(db.id) === selectedDbId)
+                                  if (!selectedDb) return "-- Chọn database --"
+                                  const dbType = selectedDb.databaseType === "MYSQL" ? "MySQL" : selectedDb.databaseType === "MONGODB" ? "MongoDB" : selectedDb.databaseType
+                                  return `${selectedDb.projectName} (${dbType})${selectedDb.databaseName ? ` - ${selectedDb.databaseName}` : ""}`
+                                })() : "-- Chọn database --"}
+                              </SelectValue>
                             </SelectTrigger>
                             <SelectContent>
                             {projectDatabases.map((db) => (
