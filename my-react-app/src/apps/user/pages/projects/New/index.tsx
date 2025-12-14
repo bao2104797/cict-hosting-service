@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom"
-import { ArrowLeft, ArrowRight } from "lucide-react"
+import { ArrowLeft, ArrowRight, Plus, Rocket } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Stepper } from "@/apps/user/components/Stepper"
 import { Card, CardContent } from "@/components/ui/card"
@@ -56,80 +56,119 @@ export function ProjectNew() {
   }
 
   return (
-    <div className="min-h-screen bg-background py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-4xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20 py-8 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-5xl mx-auto">
         {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-4">
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="mb-8"
+        >
+          <div className="flex items-center justify-between mb-6">
             <Button
               variant="ghost"
               onClick={handleGoBack}
+              className="hover:bg-muted"
             >
               <ArrowLeft className="w-4 h-4 mr-2" />
               Quay lại
             </Button>
           </div>
-          <h1 className="text-3xl font-bold text-foreground mb-2">
-            Tạo Project Mới
-          </h1>
-          <p className="text-muted-foreground">
-            Thiết lập và triển khai ứng dụng của bạn
-          </p>
-        </div>
+          <div className="flex items-center gap-4 mb-4">
+            <div className="p-3 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20">
+              <Rocket className="w-8 h-8 text-primary" />
+            </div>
+            <div>
+              <h1 className="text-4xl font-bold text-foreground mb-2 bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
+                Tạo Project Mới
+              </h1>
+              <p className="text-muted-foreground text-lg">
+                Thiết lập và triển khai ứng dụng của bạn một cách dễ dàng
+              </p>
+            </div>
+          </div>
+        </motion.div>
 
         {/* Stepper */}
-        <Card className="mb-6">
-          <CardContent className="p-6">
-            <Stepper steps={steps} currentStep={currentStep} />
-          </CardContent>
-        </Card>
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.1 }}
+          className="mb-8"
+        >
+          <Card className="border-border/50 shadow-lg">
+            <CardContent className="p-6 md:p-8">
+              <Stepper steps={steps} currentStep={currentStep} />
+            </CardContent>
+          </Card>
+        </motion.div>
 
         {/* Step content */}
-        <Card className="mb-6">
-          <CardContent className="p-6">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={currentStep}
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                transition={{ duration: 0.2 }}
-              >
-                {currentStep === 0 && <StepProjectInfo />}
-                {currentStep === 1 && <StepDatabase />}
-                {currentStep === 2 && <StepBackend />}
-                {currentStep === 3 && <StepFrontend />}
-                {currentStep === 4 && <StepSummary />}
-              </motion.div>
-            </AnimatePresence>
-          </CardContent>
-        </Card>
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.2 }}
+          className="mb-8"
+        >
+          <Card className="border-border/50 shadow-lg">
+            <CardContent className="p-6 md:p-8">
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={currentStep}
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  {currentStep === 0 && <StepProjectInfo />}
+                  {currentStep === 1 && <StepDatabase />}
+                  {currentStep === 2 && <StepBackend />}
+                  {currentStep === 3 && <StepFrontend />}
+                  {currentStep === 4 && <StepSummary />}
+                </motion.div>
+              </AnimatePresence>
+            </CardContent>
+          </Card>
+        </motion.div>
 
         {/* Navigation */}
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <Button
-                variant="outline"
-                onClick={handleBack}
-                disabled={currentStep === 0}
-              >
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Quay lại
-              </Button>
-
-              {currentStep < steps.length - 1 && (
-                <Button 
-                  onClick={handleNext}
-                  disabled={currentStep === 0 && !projectId}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.3 }}
+        >
+          <Card className="border-border/50 shadow-lg">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between gap-4">
+                <Button
+                  variant="outline"
+                  onClick={handleBack}
+                  disabled={currentStep === 0}
+                  className="min-w-[140px]"
                 >
-                  Tiếp theo
-                  <ArrowRight className="w-4 h-4 ml-2" />
+                  <ArrowLeft className="w-4 h-4 mr-2" />
+                  Quay lại
                 </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span>Bước {currentStep + 1} / {steps.length}</span>
+                </div>
+
+                {currentStep < steps.length - 1 && (
+                  <Button 
+                    onClick={handleNext}
+                    disabled={currentStep === 0 && !projectId}
+                    className="min-w-[140px]"
+                  >
+                    Tiếp theo
+                    <ArrowRight className="w-4 h-4 ml-2" />
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
       </div>
     </div>
   )

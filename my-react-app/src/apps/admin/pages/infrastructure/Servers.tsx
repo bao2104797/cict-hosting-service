@@ -635,7 +635,7 @@ export function Servers() {
             <div className="flex-1">
               <CardTitle className="text-lg font-semibold flex items-center gap-2">
                 <ServerIcon className="h-5 w-5" />
-                Hosts {server.id}
+                {server.name || server.id}
               </CardTitle>
               <p className="text-sm text-muted-foreground mt-1 font-mono flex items-center gap-1.5">
                 <Network className="h-3.5 w-3.5" />

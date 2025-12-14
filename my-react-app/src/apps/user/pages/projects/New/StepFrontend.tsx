@@ -2,7 +2,7 @@ import { useState, useEffect } from "react"
 import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
-import { Upload, X, Plus, CheckCircle2, Loader2, Trash2 } from "lucide-react"
+import { Upload, X, Plus, CheckCircle2, Loader2, Trash2, Globe, FileText, Package, Copy, Check, ExternalLink } from "lucide-react"
 import { motion } from "framer-motion"
 import type { FrontendFormData } from "@/types"
 import { validateZipFile, validateDockerImage } from "@/lib/validators"
@@ -52,6 +52,7 @@ export function StepFrontend() {
   const [isDeploying, setIsDeploying] = useState(false)
   const [projectFrontends, setProjectFrontends] = useState<FrontendInfo[]>([])
   const [loadingFrontends, setLoadingFrontends] = useState(false)
+  const [copiedField, setCopiedField] = useState<string | null>(null)
   const [deletingFrontendId, setDeletingFrontendId] = useState<number | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string; type: "api" | "store"; storeIndex?: number } | null>(null)
   const [isCheckingDns, setIsCheckingDns] = useState(false)
@@ -297,46 +298,70 @@ export function StepFrontend() {
     }
   }
 
+  const getFrontendTechColor = (tech: string) => {
+    if (tech === "REACT" || tech === "react") {
+      return { bg: "bg-cyan-100 dark:bg-cyan-950/30", text: "text-cyan-600 dark:text-cyan-400" }
+    } else if (tech === "VUE" || tech === "vue") {
+      return { bg: "bg-emerald-100 dark:bg-emerald-950/30", text: "text-emerald-600 dark:text-emerald-400" }
+    } else if (tech === "ANGULAR" || tech === "angular") {
+      return { bg: "bg-red-100 dark:bg-red-950/30", text: "text-red-600 dark:text-red-400" }
+    }
+    return { bg: "bg-green-100 dark:bg-green-950/30", text: "text-green-600 dark:text-green-400" }
+  }
+
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-foreground mb-2">
-          Bước 4/5 — Cấu hình Frontend
-        </h2>
-        <p className="text-muted-foreground">
-          Thiết lập các frontend applications
-        </p>
+      <div className="flex items-center gap-3 mb-2">
+        <div className="p-2 rounded-lg bg-green-100 dark:bg-green-950/30">
+          <Globe className="w-6 h-6 text-green-600 dark:text-green-400" />
+        </div>
+        <div>
+          <h2 className="text-2xl font-bold text-foreground">
+            Bước 4/5 — Cấu hình Frontend
+          </h2>
+          <p className="text-muted-foreground mt-1">
+            Thiết lập các frontend applications cho project
+          </p>
+        </div>
       </div>
 
       <HintBox title="Hướng dẫn">
         <ul className="list-disc list-inside space-y-1 text-sm">
-          <li>Chọn React, Vue hoặc Angular</li>
+          <li><strong>Chọn Framework:</strong> React, Vue hoặc Angular</li>
           <li>
             <strong>Upload ZIP:</strong> Tên thư mục gốc trùng với tên dự án
           </li>
           <li>
-            <strong>Docker Image:</strong> Định dạng <code className="bg-muted px-1 rounded">owner/name:tag</code>
+            <strong>Docker Image:</strong> Phải có file Dockerfile trong thư mục gốc
           </li>
           <li>
-            <strong>DNS:</strong> Chỉ a-z, 0-9, '-', dài 3-63 ký tự, không bắt đầu/kết thúc bằng '-' (ví dụ: <code className="bg-muted px-1 rounded">fe.myapp.local.test</code>)
+            <strong>Domain Name:</strong> Không chứa ký tự đặc biệt, không bắt đầu/kết thúc bằng '-' (ví dụ: <code className="bg-muted px-1 rounded">fe.myapp.local.test</code>)
           </li>
         </ul>
       </HintBox>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            Frontends đã thêm ({projectFrontends.length > 0 ? projectFrontends.length : frontends.length})
-          </CardTitle>
+      <Card className="border-border/50 shadow-sm">
+        <CardHeader className="pb-4 border-b border-border/50 bg-gradient-to-br from-green-50/50 to-transparent dark:from-green-950/20">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-green-100 dark:bg-green-950/30">
+              <Globe className="w-5 h-5 text-green-600 dark:text-green-400" />
+            </div>
+            <CardTitle className="text-xl">
+              Frontends đã thêm ({projectFrontends.length > 0 ? projectFrontends.length : frontends.length})
+            </CardTitle>
+          </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-6">
           {loadingFrontends ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
               <span className="ml-2 text-sm text-muted-foreground">Đang tải danh sách frontends...</span>
             </div>
           ) : projectFrontends.length > 0 ? (
-            <div className="space-y-3">
+            <div 
+              className="space-y-3 max-h-[600px] overflow-y-auto pr-2"
+              style={{ scrollBehavior: 'smooth' }}
+            >
               {projectFrontends.map((fe) => (
                 <motion.div
                   key={fe.id}
@@ -344,30 +369,32 @@ export function StepFrontend() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.2 }}
                 >
-                  <Card className="border">
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1 space-y-2">
-                          <div>
-                            <h4 className="font-medium">{fe.projectName}</h4>
-                            {fe.description && (
-                              <p className="text-sm text-muted-foreground mt-1">{fe.description}</p>
-                            )}
-                          </div>
-                          <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-                            <div>
-                              <span className="font-medium">Framework:</span>{" "}
-                              {fe.frameworkType === "REACT" ? "React" : fe.frameworkType === "VUE" ? "Vue" : fe.frameworkType === "ANGULAR" ? "Angular" : fe.frameworkType}
-                            </div>
-                            <div>
-                              <span className="font-medium">Deployment:</span>{" "}
-                              {fe.deploymentType === "DOCKER" ? "Docker Image" : fe.deploymentType === "FILE" ? "File ZIP" : fe.deploymentType}
-                            </div>
-                            {fe.domainNameSystem && (
-                              <div>
-                                <span className="font-medium">DNS:</span> {fe.domainNameSystem}
+                  <Card className="border border-border/50 hover:shadow-lg transition-all">
+                    <CardContent className="p-5">
+                      {/* Header */}
+                      <div className="flex items-start justify-between gap-4 mb-4 pb-4 border-b border-border/50">
+                        <div className="flex items-start gap-3 flex-1">
+                          {(() => {
+                            const techColors = getFrontendTechColor(fe.frameworkType || "")
+                            return (
+                              <div className={`p-2.5 rounded-lg flex-shrink-0 ${techColors.bg}`}>
+                                <Globe className={`w-5 h-5 ${techColors.text}`} />
                               </div>
+                            )
+                          })()}
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-base">{fe.projectName}</h4>
+                            {fe.description && (
+                              <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{fe.description}</p>
                             )}
+                            <div className="flex flex-wrap gap-3 mt-2">
+                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-muted text-xs font-medium">
+                                {fe.frameworkType === "REACT" ? "React" : fe.frameworkType === "VUE" ? "Vue" : fe.frameworkType === "ANGULAR" ? "Angular" : fe.frameworkType}
+                              </span>
+                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-muted text-xs font-medium">
+                                {fe.deploymentType === "DOCKER" ? "Docker Image" : fe.deploymentType === "FILE" ? "File ZIP" : fe.deploymentType}
+                              </span>
+                            </div>
                           </div>
                         </div>
                         <Button
@@ -375,14 +402,109 @@ export function StepFrontend() {
                           size="icon"
                           onClick={() => handleDeleteFrontend(fe.id, fe.projectName)}
                           disabled={deletingFrontendId === fe.id}
-                          className="flex-shrink-0"
+                          className="flex-shrink-0 hover:bg-destructive/10 hover:text-destructive"
                         >
                           {deletingFrontendId === fe.id ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
                           ) : (
-                            <Trash2 className="w-4 h-4 text-destructive" />
+                            <Trash2 className="w-4 h-4" />
                           )}
                         </Button>
+                      </div>
+
+                      {/* Connection Information */}
+                      <div className="space-y-3">
+                        {/* DNS */}
+                        {fe.domainNameSystem && (
+                          <div className="p-3 bg-muted/50 rounded-lg border border-border/50 flex items-start gap-3">
+                            <div className="p-1.5 rounded-md bg-green-100 dark:bg-green-950/30 flex-shrink-0 mt-0.5">
+                              <Globe className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                                Domain Name (DNS)
+                              </Label>
+                              <div className="flex items-center gap-2 mt-1">
+                                <a
+                                  href={`http://${fe.domainNameSystem}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="font-mono text-sm flex-1 truncate text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 underline"
+                                  onClick={(e) => {
+                                    e.preventDefault()
+                                    window.open(`http://${fe.domainNameSystem}`, '_blank')
+                                  }}
+                                >
+                                  {fe.domainNameSystem}
+                                </a>
+                                <div className="flex items-center gap-1 flex-shrink-0">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6"
+                                    onClick={(e) => {
+                                      e.preventDefault()
+                                      window.open(`http://${fe.domainNameSystem}`, '_blank')
+                                    }}
+                                  >
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6"
+                                    onClick={async () => {
+                                      await navigator.clipboard.writeText(fe.domainNameSystem || "")
+                                      setCopiedField(`dns-${fe.id}`)
+                                      toast.success("Đã sao chép DNS")
+                                      setTimeout(() => setCopiedField(null), 2000)
+                                    }}
+                                  >
+                                    {copiedField === `dns-${fe.id}` ? (
+                                      <Check className="w-3.5 h-3.5 text-green-600" />
+                                    ) : (
+                                      <Copy className="w-3.5 h-3.5" />
+                                    )}
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Docker Image (if exists) */}
+                        {fe.dockerImage && (
+                          <div className="p-3 bg-muted/50 rounded-lg border border-border/50 flex items-start gap-3">
+                            <div className="p-1.5 rounded-md bg-indigo-100 dark:bg-indigo-950/30 flex-shrink-0 mt-0.5">
+                              <Package className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                                Docker Image
+                              </Label>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="font-mono text-sm flex-1 truncate">{fe.dockerImage}</span>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 flex-shrink-0"
+                                  onClick={async () => {
+                                    await navigator.clipboard.writeText(fe.dockerImage || "")
+                                    setCopiedField(`docker-${fe.id}`)
+                                    toast.success("Đã sao chép Docker Image")
+                                    setTimeout(() => setCopiedField(null), 2000)
+                                  }}
+                                >
+                                  {copiedField === `docker-${fe.id}` ? (
+                                    <Check className="w-3.5 h-3.5 text-green-600" />
+                                  ) : (
+                                    <Copy className="w-3.5 h-3.5" />
+                                  )}
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
@@ -391,7 +513,10 @@ export function StepFrontend() {
             </div>
           ) : frontends.length > 0 ? (
             // Fallback to store data if API data is not available
-            <div className="space-y-3">
+            <div 
+              className="space-y-3 max-h-[600px] overflow-y-auto pr-2"
+              style={{ scrollBehavior: 'smooth' }}
+            >
               {frontends.map((fe, index) => (
                 <motion.div
                   key={index}
@@ -399,33 +524,136 @@ export function StepFrontend() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.2 }}
                 >
-                  <Card className="border">
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <h4 className="font-medium">{fe.name}</h4>
-                          <p className="text-sm text-muted-foreground">
-                            {fe.tech === "react" ? "React" : fe.tech === "vue" ? "Vue" : "Angular"}
-                          </p>
-                          {fe.publicUrl && (
-                            <p className="text-sm text-muted-foreground mt-1">
-                              URL: {fe.publicUrl}
-                            </p>
-                          )}
-                          {fe.dockerImage && (
-                            <p className="text-sm text-muted-foreground mt-1 font-mono text-xs">
-                              {fe.dockerImage}
-                            </p>
-                          )}
+                  <Card className="border border-border/50 hover:shadow-lg transition-all">
+                    <CardContent className="p-5">
+                      {/* Header */}
+                      <div className="flex items-start justify-between gap-4 mb-4 pb-4 border-b border-border/50">
+                        <div className="flex items-start gap-3 flex-1">
+                          {(() => {
+                            const techColors = getFrontendTechColor(fe.tech || "")
+                            return (
+                              <div className={`p-2.5 rounded-lg flex-shrink-0 ${techColors.bg}`}>
+                                <Globe className={`w-5 h-5 ${techColors.text}`} />
+                              </div>
+                            )
+                          })()}
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-base">{fe.name}</h4>
+                            <div className="flex flex-wrap gap-3 mt-2">
+                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-muted text-xs font-medium">
+                                {fe.tech === "react" ? "React" : fe.tech === "vue" ? "Vue" : "Angular"}
+                              </span>
+                              {fe.sourceType && (
+                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-muted text-xs font-medium">
+                                  {fe.sourceType === "image" ? "Docker Image" : "File ZIP"}
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         </div>
                         <Button
                           variant="ghost"
                           size="icon"
                           onClick={() => handleDeleteFrontendFromStore(index, fe.name)}
-                          className="flex-shrink-0"
+                          className="flex-shrink-0 hover:bg-destructive/10 hover:text-destructive"
                         >
-                          <Trash2 className="w-4 h-4 text-destructive" />
+                          <Trash2 className="w-4 h-4" />
                         </Button>
+                      </div>
+
+                      {/* Connection Information */}
+                      <div className="space-y-3">
+                        {/* DNS */}
+                        {fe.publicUrl && (
+                          <div className="p-3 bg-muted/50 rounded-lg border border-border/50 flex items-start gap-3">
+                            <div className="p-1.5 rounded-md bg-green-100 dark:bg-green-950/30 flex-shrink-0 mt-0.5">
+                              <Globe className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                                Domain Name (DNS)
+                              </Label>
+                              <div className="flex items-center gap-2 mt-1">
+                                <a
+                                  href={`http://${fe.publicUrl}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="font-mono text-sm flex-1 truncate text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 underline"
+                                  onClick={(e) => {
+                                    e.preventDefault()
+                                    window.open(`http://${fe.publicUrl}`, '_blank')
+                                  }}
+                                >
+                                  {fe.publicUrl}
+                                </a>
+                                <div className="flex items-center gap-1 flex-shrink-0">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6"
+                                    onClick={(e) => {
+                                      e.preventDefault()
+                                      window.open(`http://${fe.publicUrl}`, '_blank')
+                                    }}
+                                  >
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6"
+                                    onClick={async () => {
+                                      await navigator.clipboard.writeText(fe.publicUrl || "")
+                                      setCopiedField(`dns-store-${index}`)
+                                      toast.success("Đã sao chép DNS")
+                                      setTimeout(() => setCopiedField(null), 2000)
+                                    }}
+                                  >
+                                    {copiedField === `dns-store-${index}` ? (
+                                      <Check className="w-3.5 h-3.5 text-green-600" />
+                                    ) : (
+                                      <Copy className="w-3.5 h-3.5" />
+                                    )}
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Docker Image (if exists) */}
+                        {fe.dockerImage && (
+                          <div className="p-3 bg-muted/50 rounded-lg border border-border/50 flex items-start gap-3">
+                            <div className="p-1.5 rounded-md bg-indigo-100 dark:bg-indigo-950/30 flex-shrink-0 mt-0.5">
+                              <Package className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                                Docker Image
+                              </Label>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="font-mono text-sm flex-1 truncate">{fe.dockerImage}</span>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 flex-shrink-0"
+                                  onClick={async () => {
+                                    await navigator.clipboard.writeText(fe.dockerImage || "")
+                                    setCopiedField(`docker-store-${index}`)
+                                    toast.success("Đã sao chép Docker Image")
+                                    setTimeout(() => setCopiedField(null), 2000)
+                                  }}
+                                >
+                                  {copiedField === `docker-store-${index}` ? (
+                                    <Check className="w-3.5 h-3.5 text-green-600" />
+                                  ) : (
+                                    <Copy className="w-3.5 h-3.5" />
+                                  )}
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
@@ -433,20 +661,33 @@ export function StepFrontend() {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground text-center py-4">
-              Chưa có frontend nào. Nhấn "Thêm Frontend" để bắt đầu.
-            </p>
+            <div className="text-center py-8">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 dark:bg-green-950/30 mb-3">
+                <Globe className="w-8 h-8 text-green-600 dark:text-green-400" />
+              </div>
+              <p className="text-sm font-medium text-muted-foreground mb-1">
+                Chưa có frontend nào
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Nhấn "Thêm Frontend" để bắt đầu
+              </p>
+            </div>
           )}
         </CardContent>
       </Card>
 
       {showForm ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Thêm Frontend</CardTitle>
+        <Card className="border-border/50 shadow-sm">
+          <CardHeader className="pb-4 border-b border-border/50 bg-gradient-to-br from-green-50/50 to-transparent dark:from-green-950/20">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-green-100 dark:bg-green-950/30">
+                <Plus className="w-5 h-5 text-green-600 dark:text-green-400" />
+              </div>
+              <CardTitle className="text-xl">Thêm Frontend</CardTitle>
+            </div>
           </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <CardContent className="p-6">
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
               {isDeploying && (
                 <div className="p-4 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
                   <div className="flex items-center gap-2">
@@ -460,47 +701,73 @@ export function StepFrontend() {
                   </p>
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="name">Tên Frontend <span className="text-destructive">*</span></Label>
-                  <Input id="name" {...register("name")} placeholder="web-app" disabled={isDeploying} />
-                  {formErrors.name && (
-                    <p className="text-sm text-destructive mt-1">{formErrors.name.message}</p>
-                  )}
+              {/* Basic Information */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-border/50">
+                  <FileText className="w-4 h-4 text-muted-foreground" />
+                  <Label className="text-base font-semibold">Thông tin cơ bản</Label>
                 </div>
-                <div>
-                  <Label htmlFor="tech">Technology <span className="text-destructive">*</span></Label>
-                  <Controller
-                    name="tech"
-                    control={control}
-                    render={({ field }) => (
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <SelectTrigger id="tech" disabled={isDeploying}>
-                          <SelectValue placeholder="Chọn technology" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="react">React</SelectItem>
-                          <SelectItem value="vue">Vue</SelectItem>
-                          <SelectItem value="angular">Angular</SelectItem>
-                        </SelectContent>
-                  </Select>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="name" className="text-sm font-medium">
+                      Tên Frontend <span className="text-destructive">*</span>
+                    </Label>
+                    <Input 
+                      id="name" 
+                      {...register("name")} 
+                      placeholder="web-app" 
+                      disabled={isDeploying}
+                      className="mt-1.5"
+                    />
+                    {formErrors.name && (
+                      <p className="text-sm text-destructive mt-1">{formErrors.name.message}</p>
                     )}
-                  />
-                  {formErrors.tech && (
-                    <p className="text-sm text-destructive mt-1">{formErrors.tech.message}</p>
-                  )}
+                  </div>
+                  <div>
+                    <Label htmlFor="tech" className="text-sm font-medium">
+                      Framework <span className="text-destructive">*</span>
+                    </Label>
+                    <Controller
+                      name="tech"
+                      control={control}
+                      render={({ field }) => (
+                        <Select value={field.value} onValueChange={field.onChange}>
+                          <SelectTrigger id="tech" disabled={isDeploying} className="mt-1.5">
+                            <SelectValue placeholder="Chọn technology" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="react">React</SelectItem>
+                            <SelectItem value="vue">Vue</SelectItem>
+                            <SelectItem value="angular">Angular</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                    {formErrors.tech && (
+                      <p className="text-sm text-destructive mt-1">{formErrors.tech.message}</p>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              <div>
-                <Label>Nguồn mã nguồn <span className="text-destructive">*</span></Label>
-                <div className="flex gap-2 mt-2">
+              {/* Source Type */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-border/50">
+                  <Package className="w-4 h-4 text-muted-foreground" />
+                  <Label className="text-base font-semibold">
+                    Nguồn mã nguồn <span className="text-destructive">*</span>
+                  </Label>
+                </div>
+                <div className="flex gap-2">
                   <Button
                     type="button"
                     variant={sourceType === "zip" ? "default" : "outline"}
                     onClick={() => setValue("sourceType", "zip")}
                     disabled={isDeploying}
+                    className="flex-1"
                   >
+                    <Upload className="w-4 h-4 mr-2" />
                     Upload ZIP
                   </Button>
                   <Button
@@ -508,29 +775,39 @@ export function StepFrontend() {
                     variant={sourceType === "image" ? "default" : "outline"}
                     onClick={() => setValue("sourceType", "image")}
                     disabled={isDeploying}
+                    className="flex-1"
                   >
+                    <Package className="w-4 h-4 mr-2" />
                     Docker Image
                   </Button>
                 </div>
               </div>
 
               {sourceType === "zip" ? (
-                <div>
-                  <Label>File ZIP <span className="text-destructive">*</span></Label>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">
+                    File ZIP <span className="text-destructive">*</span>
+                  </Label>
                   <div
-                    className={`mt-2 border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
-                      isDeploying ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-muted"
+                    className={`border-2 border-dashed rounded-lg p-8 text-center transition-all ${
+                      isDeploying 
+                        ? "opacity-50 cursor-not-allowed border-muted-foreground/30" 
+                        : "cursor-pointer hover:bg-muted/50 hover:border-primary/50 border-border"
                     }`}
                     onClick={() => !isDeploying && document.getElementById("zip-input-fe")?.click()}
                   >
                     {zipFile ? (
-                      <div>
-                        <p className="font-medium">{zipFile.name}</p>
+                      <div className="space-y-3">
+                        <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-green-100 dark:bg-green-950/30">
+                          <CheckCircle2 className="w-6 h-6 text-green-600 dark:text-green-400" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-sm">{zipFile.name}</p>
+                        </div>
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
-                          className="mt-2"
                           onClick={(e) => {
                             e.stopPropagation()
                             setZipFile(null)
@@ -538,13 +815,16 @@ export function StepFrontend() {
                           }}
                           disabled={isDeploying}
                         >
+                          <X className="w-3 h-3 mr-1" />
                           Xóa file
                         </Button>
                       </div>
                     ) : (
-                      <div>
-                        <Upload className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
-                        <p className="text-sm">Chọn file ZIP</p>
+                      <div className="space-y-2">
+                        <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-muted">
+                          <Upload className="w-6 h-6 text-muted-foreground" />
+                        </div>
+                        <p className="text-sm font-medium">Chọn file ZIP</p>
                       </div>
                     )}
                   </div>
@@ -572,13 +852,15 @@ export function StepFrontend() {
                   )}
                 </div>
               ) : (
-                <div>
-                  <Label htmlFor="dockerImage">Docker Image <span className="text-destructive">*</span></Label>
+                <div className="space-y-2">
+                  <Label htmlFor="dockerImage" className="text-sm font-medium">
+                    Docker Image <span className="text-destructive">*</span>
+                  </Label>
                   <Input
                     id="dockerImage"
                     {...register("dockerImage")}
                     placeholder="docker.io/user/app:1.0.0"
-                    className="font-mono"
+                    className="font-mono mt-1.5"
                     onBlur={validateDocker}
                     disabled={isDeploying}
                   />
@@ -588,67 +870,64 @@ export function StepFrontend() {
                 </div>
               )}
 
-              <div>
-                <Label htmlFor="publicUrl">DNS (tùy chọn)</Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="publicUrl"
-                    {...register("publicUrl")}
-                    placeholder="fe-myapp"
-                    className={`flex-1 ${
-                      dnsStatus === "valid"
-                        ? "border-green-500 focus-visible:ring-green-500"
-                        : dnsStatus === "invalid"
-                        ? "border-red-500 focus-visible:ring-red-500 text-red-600"
-                        : ""
-                    }`}
-                    disabled={isDeploying}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleCheckDns}
-                    disabled={isDeploying || isCheckingDns}
-                  >
-                    {isCheckingDns ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Đang kiểm tra...
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 className="w-4 h-4 mr-2" />
-                        Kiểm tra
-                      </>
-                    )}
-                  </Button>
+              {/* Domain Name */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-border/50">
+                  <Globe className="w-4 h-4 text-muted-foreground" />
+                  <Label className="text-base font-semibold">Domain Name (Tùy chọn)</Label>
                 </div>
-                {dnsMessage && (
-                  <p
-                    className={`text-sm mt-1 ${
-                      dnsStatus === "valid"
-                        ? "text-green-600"
-                        : dnsStatus === "invalid"
-                        ? "text-red-600"
-                        : "text-muted-foreground"
-                    }`}
-                  >
-                    {dnsMessage}
-                  </p>
-                )}
+                <div>
+                  <Label htmlFor="publicUrl" className="text-sm font-medium">Domain Name</Label>
+                  <div className="flex gap-2 mt-1.5">
+                    <Input
+                      id="publicUrl"
+                      {...register("publicUrl")}
+                      placeholder="fe-myapp"
+                      className={`flex-1 ${
+                        dnsStatus === "valid"
+                          ? "border-green-500 focus-visible:ring-green-500"
+                          : dnsStatus === "invalid"
+                          ? "border-red-500 focus-visible:ring-red-500 text-red-600"
+                          : ""
+                      }`}
+                      disabled={isDeploying}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleCheckDns}
+                      disabled={isDeploying || isCheckingDns}
+                    >
+                      {isCheckingDns ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Đang kiểm tra...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-4 h-4 mr-2" />
+                          Kiểm tra
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  {dnsMessage && (
+                    <p
+                      className={`text-sm mt-1 ${
+                        dnsStatus === "valid"
+                          ? "text-green-600"
+                          : dnsStatus === "invalid"
+                          ? "text-red-600"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      {dnsMessage}
+                    </p>
+                  )}
+                </div>
               </div>
 
-              <div className="flex gap-2">
-                <Button type="submit" disabled={isDeploying}>
-                  {isDeploying ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Đang triển khai...
-                    </>
-                  ) : (
-                    "Thêm"
-                  )}
-                </Button>
+              <div className="flex justify-end gap-3 pt-4 border-t border-border/50">
                 <Button
                   type="button"
                   variant="outline"
@@ -662,12 +941,25 @@ export function StepFrontend() {
                 >
                   Hủy
                 </Button>
+                <Button type="submit" disabled={isDeploying} className="min-w-[140px]">
+                  {isDeploying ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Đang triển khai...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Thêm Frontend
+                    </>
+                  )}
+                </Button>
               </div>
             </form>
           </CardContent>
         </Card>
       ) : (
-        <Button variant="outline" className="w-full" onClick={() => setShowForm(true)}>
+        <Button variant="outline" className="w-full h-12" onClick={() => setShowForm(true)}>
           <Plus className="w-4 h-4 mr-2" />
           Thêm Frontend
         </Button>
