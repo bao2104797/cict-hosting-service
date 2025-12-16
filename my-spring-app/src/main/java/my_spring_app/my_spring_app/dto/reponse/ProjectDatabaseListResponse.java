@@ -28,6 +28,8 @@ public class ProjectDatabaseListResponse {
         private String databaseUsername;
         private String databasePassword;
         private String status; // RUNNING, STOPPED, ERROR
+        private String cpu; // CPU usage
+        private String memory; // Memory usage
         private LocalDateTime createdAt;
     }
 }

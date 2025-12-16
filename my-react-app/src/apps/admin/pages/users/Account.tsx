@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, RefreshCw, ShieldCheck, Trash2, MoreVertical, UserX, Search, Plus, Eye, EyeOff } from "lucide-react";
+import { Loader2, RefreshCw, Trash2, MoreVertical, UserX, Search, Plus, Eye, EyeOff, AlertTriangle, Edit } from "lucide-react";
 import { toast } from "sonner";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
@@ -44,12 +44,33 @@ export function Account() {
   const [isCreating, setIsCreating] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [accountToDelete, setAccountToDelete] = useState<AdminAccount | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isUpdateDialogOpen, setIsUpdateDialogOpen] = useState(false);
+  const [accountToUpdate, setAccountToUpdate] = useState<AdminAccount | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [isResetPasswordDialogOpen, setIsResetPasswordDialogOpen] = useState(false);
+  const [accountToResetPassword, setAccountToResetPassword] = useState<AdminAccount | null>(null);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [showResetConfirmPassword, setShowResetConfirmPassword] = useState(false);
+  const [resetPasswordData, setResetPasswordData] = useState({
+    password: "",
+    confirmPassword: "",
+  });
   const [formData, setFormData] = useState({
     fullname: "",
     username: "",
     password: "",
     confirmPassword: "",
     tier: "STANDARD" as "STANDARD" | "PREMIUM",
+    role: "USER" as "ADMIN" | "USER",
+  });
+  const [updateFormData, setUpdateFormData] = useState({
+    fullname: "",
+    tier: "STANDARD" as "STANDARD" | "PREMIUM",
+    role: "USER" as "ADMIN" | "USER",
   });
 
   useEffect(() => {
@@ -94,44 +115,134 @@ export function Account() {
     setFilteredAccounts(filtered);
   }, [searchTerm, statusFilter, roleFilter, accounts]);
 
-  const handleResetPassword = async (account: AdminAccount) => {
+  const handleResetPassword = (account: AdminAccount) => {
+    setAccountToResetPassword(account);
+    setResetPasswordData({
+      password: "",
+      confirmPassword: "",
+    });
+    setIsResetPasswordDialogOpen(true);
+  };
+
+  const handleConfirmResetPassword = async () => {
+    if (!accountToResetPassword) return;
+
+    // Validate
+    if (!resetPasswordData.password) {
+      toast.error("Vui lòng nhập mật khẩu mới");
+      return;
+    }
+    if (resetPasswordData.password.length < 6) {
+      toast.error("Mật khẩu phải có ít nhất 6 ký tự");
+      return;
+    }
+    if (resetPasswordData.password !== resetPasswordData.confirmPassword) {
+      toast.error("Mật khẩu xác nhận không khớp");
+      return;
+    }
+
     try {
-      await adminAPI.resetAdminAccountPassword(account.id);
-      toast.success(`Đã gửi email đặt lại mật khẩu cho ${account.name}`);
-    } catch (error) {
-      toast.error("Không thể reset mật khẩu");
+      setIsResettingPassword(true);
+      await adminAPI.resetAdminAccountPassword(
+        accountToResetPassword.id,
+        resetPasswordData.password,
+        resetPasswordData.confirmPassword
+      );
+      toast.success(`Đã đặt lại mật khẩu cho ${accountToResetPassword.username}`);
+      setIsResetPasswordDialogOpen(false);
+      setAccountToResetPassword(null);
+      setResetPasswordData({
+        password: "",
+        confirmPassword: "",
+      });
+    } catch (error: any) {
+      const errorMessage = error?.response?.data || error?.message || "Không thể đặt lại mật khẩu";
+      toast.error(errorMessage);
+    } finally {
+      setIsResettingPassword(false);
     }
   };
 
-  const handleToggleStatus = async (account: AdminAccount) => {
+  const handleUpdateAccount = (account: AdminAccount) => {
+    setAccountToUpdate(account);
+    // Chỉ chấp nhận ADMIN hoặc USER, nếu là DEVOPS thì mặc định là USER
+    const role = account.role === "ADMIN" || account.role === "USER" ? account.role : "USER";
+    setUpdateFormData({
+      fullname: account.name,
+      tier: account.tier.toUpperCase() as "STANDARD" | "PREMIUM",
+      role: role as "ADMIN" | "USER",
+    });
+    setIsUpdateDialogOpen(true);
+  };
+
+  const handleConfirmUpdate = async () => {
+    if (!accountToUpdate) return;
+
+    // Validate
+    if (!updateFormData.fullname.trim()) {
+      toast.error("Vui lòng nhập họ tên");
+      return;
+    }
+
     try {
-      const newStatus = account.status === "active" ? "inactive" : "active";
-      await adminAPI.updateAdminAccountStatus(account.id, newStatus);
-      toast.success(
-        `Đã ${newStatus === "active" ? "kích hoạt" : "vô hiệu hóa"} tài khoản ${account.username}`
-      );
-      setAccounts((prev) =>
-        prev.map((acc) =>
-          acc.id === account.id
-            ? { ...acc, status: newStatus, lastLogin: newStatus === "active" ? new Date().toISOString() : acc.lastLogin }
-            : acc
-        )
-      );
-    } catch (error) {
-      toast.error("Không thể cập nhật trạng thái");
+      setIsUpdating(true);
+      const updatedAccount = await adminAPI.updateAdminAccount(accountToUpdate.id, {
+        fullname: updateFormData.fullname.trim(),
+        tier: updateFormData.tier,
+        role: updateFormData.role,
+      });
+      toast.success(`Đã cập nhật tài khoản ${updatedAccount.username}`);
+      setIsUpdateDialogOpen(false);
+      setAccountToUpdate(null);
+      // Reload accounts (silent mode để không hiển thị toast "làm mới")
+      await handleRefresh(true);
+    } catch (error: any) {
+      const errorMessage = error?.response?.data || error?.message || "Không thể cập nhật tài khoản";
+      toast.error(errorMessage);
+    } finally {
+      setIsUpdating(false);
     }
   };
 
   const handleDeleteAccount = (account: AdminAccount) => {
-    toast.info(`Đã gửi yêu cầu xóa tài khoản ${account.username}`);
+    setAccountToDelete(account);
+    setIsDeleteDialogOpen(true);
   };
 
-  const handleRefresh = async () => {
+  const handleConfirmDelete = async () => {
+    if (!accountToDelete) return;
+
+    try {
+      setIsDeleting(true);
+      // Lấy username của tài khoản đang đăng nhập từ localStorage
+      const currentUsername = localStorage.getItem("username");
+      if (!currentUsername) {
+        toast.error("Không tìm thấy thông tin tài khoản đang đăng nhập");
+        return;
+      }
+
+      await adminAPI.deleteAdminAccount(accountToDelete.id, currentUsername);
+      toast.success(`Đã xóa tài khoản ${accountToDelete.username}`);
+      setIsDeleteDialogOpen(false);
+      setAccountToDelete(null);
+      // Reload accounts (silent mode để không hiển thị toast "làm mới")
+      await handleRefresh(true);
+    } catch (error: any) {
+      const errorMessage = error?.response?.data || error?.message || "Không thể xóa tài khoản";
+      toast.error(errorMessage);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleRefresh = async (silent: boolean = false) => {
     try {
       setIsRefreshing(true);
       const data = await adminAPI.getAdminAccounts();
       setAccounts(data);
-      toast.success("Đã làm mới danh sách tài khoản");
+      if (!silent) {
+        toast.success("Đã làm mới danh sách tài khoản");
+      }
     } catch (error) {
       toast.error("Không thể làm mới danh sách tài khoản");
     } finally {
@@ -170,6 +281,7 @@ export function Account() {
         password: formData.password,
         confirmPassword: formData.confirmPassword,
         tier: formData.tier,
+        role: formData.role,
       });
       toast.success("Tạo tài khoản thành công");
       setIsCreateDialogOpen(false);
@@ -180,9 +292,10 @@ export function Account() {
         password: "",
         confirmPassword: "",
         tier: "STANDARD",
+        role: "USER",
       });
-      // Reload accounts
-      await handleRefresh();
+      // Reload accounts (silent mode để không hiển thị toast "làm mới")
+      await handleRefresh(true);
     } catch (error: any) {
       const errorMessage = error.message || error.response?.data?.message || "Không thể tạo tài khoản";
       toast.error(errorMessage);
@@ -275,7 +388,7 @@ export function Account() {
       </div>
       <Button
         variant="outline"
-        onClick={handleRefresh}
+        onClick={() => handleRefresh()}
         disabled={isRefreshing || loading}
       >
         {(isRefreshing || loading) ? (
@@ -339,7 +452,7 @@ export function Account() {
         </Card>
       </div>
 
-      <Card>
+      <Card className="mb-[50px]">
         <CardHeader>
           <CardTitle>
             {filteredCount === totalCount
@@ -369,6 +482,7 @@ export function Account() {
                       </p>
                       <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
                         <span>Role: <span className="text-foreground font-medium">{account.role}</span></span>
+                        <span>Tier: <span className="text-foreground font-medium capitalize">{account.tier}</span></span>
                         <span>Dịch vụ: <span className="text-foreground font-medium">{account.services ?? 0}</span></span>
                         <span>Dự án: <span className="text-foreground font-medium">{account.projectCount}</span></span>
                       </div>
@@ -387,13 +501,13 @@ export function Account() {
                       align="right"
                         usePortal
                     >
+                      <DropdownMenuItem onClick={() => handleUpdateAccount(account)}>
+                        <Edit className="mr-2 h-4 w-4" />
+                        Cập nhật thông tin
+                      </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => handleResetPassword(account)}>
                         <RefreshCw className="mr-2 h-4 w-4" />
                         Reset mật khẩu
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleToggleStatus(account)}>
-                        <ShieldCheck className="mr-2 h-4 w-4" />
-                        {account.status === "active" ? "Vô hiệu hóa" : "Kích hoạt"}
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         className="text-destructive"
@@ -460,6 +574,23 @@ export function Account() {
                 <SelectContent>
                   <SelectItem value="STANDARD">Standard</SelectItem>
                   <SelectItem value="PREMIUM">Premium</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="role">
+                Role <span className="text-destructive">*</span>
+              </Label>
+              <Select
+                value={formData.role}
+                onValueChange={(value) => setFormData({ ...formData, role: value as "ADMIN" | "USER" })}
+              >
+                <SelectTrigger disabled={isCreating}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="USER">User</SelectItem>
+                  <SelectItem value="ADMIN">Admin</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -533,6 +664,7 @@ export function Account() {
                   password: "",
                   confirmPassword: "",
                   tier: "STANDARD",
+                  role: "USER",
                 });
               }}
               disabled={isCreating}
@@ -549,6 +681,297 @@ export function Account() {
                 <>
                   <Plus className="mr-2 h-4 w-4" />
                   Tạo tài khoản
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={(open) => {
+        if (!isDeleting) {
+          setIsDeleteDialogOpen(open);
+          if (!open) {
+            setAccountToDelete(null);
+          }
+        }
+      }}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              Xác nhận xóa tài khoản
+            </DialogTitle>
+            <DialogDescription>
+              Hành động này không thể hoàn tác. Tài khoản sẽ bị xóa vĩnh viễn.
+            </DialogDescription>
+          </DialogHeader>
+          {accountToDelete && (
+            <div className="py-4">
+              <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-4 space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 bg-destructive/10 rounded-full">
+                    <UserX className="h-5 w-5 text-destructive" />
+                  </div>
+                  <div className="flex-1 space-y-1">
+                    <p className="font-semibold text-sm">Thông tin tài khoản sẽ bị xóa:</p>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="text-muted-foreground">Tên:</span>
+                        <span className="font-medium">{accountToDelete.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-muted-foreground">Username:</span>
+                        <span className="font-mono font-medium">{accountToDelete.username}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-muted-foreground">Role:</span>
+                        <Badge variant="outline">{accountToDelete.role}</Badge>
+                      </div>
+                      {accountToDelete.projectCount > 0 && (
+                        <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+                          <AlertTriangle className="h-4 w-4" />
+                          <span className="text-xs">
+                            Tài khoản này có {accountToDelete.projectCount} dự án và {accountToDelete.services} dịch vụ
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsDeleteDialogOpen(false);
+                setAccountToDelete(null);
+              }}
+              disabled={isDeleting}
+            >
+              Hủy
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              disabled={isDeleting}
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Đang xóa...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Xóa tài khoản
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Update Account Dialog */}
+      <Dialog open={isUpdateDialogOpen} onOpenChange={(open) => {
+        if (!isUpdating) {
+          setIsUpdateDialogOpen(open);
+          if (!open) {
+            setAccountToUpdate(null);
+          }
+        }
+      }}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Cập nhật tài khoản</DialogTitle>
+            <DialogDescription>
+              Cập nhật thông tin tài khoản {accountToUpdate?.username}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="update-fullname">
+                Họ tên <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="update-fullname"
+                placeholder="Nhập họ tên"
+                value={updateFormData.fullname}
+                onChange={(e) => setUpdateFormData({ ...updateFormData, fullname: e.target.value })}
+                disabled={isUpdating}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="update-tier">
+                Cấp bậc <span className="text-destructive">*</span>
+              </Label>
+              <Select
+                value={updateFormData.tier}
+                onValueChange={(value) => setUpdateFormData({ ...updateFormData, tier: value as "STANDARD" | "PREMIUM" })}
+              >
+                <SelectTrigger disabled={isUpdating}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="STANDARD">Standard</SelectItem>
+                  <SelectItem value="PREMIUM">Premium</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="update-role">
+                Role <span className="text-destructive">*</span>
+              </Label>
+              <Select
+                value={updateFormData.role}
+                onValueChange={(value) => setUpdateFormData({ ...updateFormData, role: value as "ADMIN" | "USER" })}
+              >
+                <SelectTrigger disabled={isUpdating}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="USER">User</SelectItem>
+                  <SelectItem value="ADMIN">Admin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsUpdateDialogOpen(false);
+                setAccountToUpdate(null);
+              }}
+              disabled={isUpdating}
+            >
+              Hủy
+            </Button>
+            <Button onClick={handleConfirmUpdate} disabled={isUpdating}>
+              {isUpdating ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Đang cập nhật...
+                </>
+              ) : (
+                <>
+                  <Edit className="mr-2 h-4 w-4" />
+                  Cập nhật
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reset Password Dialog */}
+      <Dialog open={isResetPasswordDialogOpen} onOpenChange={(open) => {
+        if (!isResettingPassword) {
+          setIsResetPasswordDialogOpen(open);
+          if (!open) {
+            setAccountToResetPassword(null);
+            setResetPasswordData({
+              password: "",
+              confirmPassword: "",
+            });
+          }
+        }
+      }}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Đặt lại mật khẩu</DialogTitle>
+            <DialogDescription>
+              Đặt lại mật khẩu cho tài khoản {accountToResetPassword?.username}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="reset-password">
+                Mật khẩu mới <span className="text-destructive">*</span>
+              </Label>
+              <div className="relative">
+                <Input
+                  id="reset-password"
+                  type={showResetPassword ? "text" : "password"}
+                  placeholder="Nhập mật khẩu mới (tối thiểu 6 ký tự)"
+                  value={resetPasswordData.password}
+                  onChange={(e) => setResetPasswordData({ ...resetPasswordData, password: e.target.value })}
+                  disabled={isResettingPassword}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                  onClick={() => setShowResetPassword(!showResetPassword)}
+                  disabled={isResettingPassword}
+                >
+                  {showResetPassword ? (
+                    <EyeOff className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <Eye className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </Button>
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="reset-confirm-password">
+                Xác nhận mật khẩu <span className="text-destructive">*</span>
+              </Label>
+              <div className="relative">
+                <Input
+                  id="reset-confirm-password"
+                  type={showResetConfirmPassword ? "text" : "password"}
+                  placeholder="Nhập lại mật khẩu mới"
+                  value={resetPasswordData.confirmPassword}
+                  onChange={(e) => setResetPasswordData({ ...resetPasswordData, confirmPassword: e.target.value })}
+                  disabled={isResettingPassword}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                  onClick={() => setShowResetConfirmPassword(!showResetConfirmPassword)}
+                  disabled={isResettingPassword}
+                >
+                  {showResetConfirmPassword ? (
+                    <EyeOff className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <Eye className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsResetPasswordDialogOpen(false);
+                setAccountToResetPassword(null);
+                setResetPasswordData({
+                  password: "",
+                  confirmPassword: "",
+                });
+              }}
+              disabled={isResettingPassword}
+            >
+              Hủy
+            </Button>
+            <Button onClick={handleConfirmResetPassword} disabled={isResettingPassword}>
+              {isResettingPassword ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Đang đặt lại...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Đặt lại mật khẩu
                 </>
               )}
             </Button>

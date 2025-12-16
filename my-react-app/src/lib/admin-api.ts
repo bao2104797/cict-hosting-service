@@ -1548,6 +1548,7 @@ export const adminAPI = {
     password: string;
     confirmPassword: string;
     tier?: "STANDARD" | "PREMIUM";
+    role?: "ADMIN" | "USER";
   }): Promise<void> => {
     await api.post("/users", {
       fullname: data.fullname,
@@ -1555,15 +1556,105 @@ export const adminAPI = {
       password: data.password,
       confirmPassword: data.confirmPassword,
       tier: data.tier || "STANDARD",
+      role: data.role || "USER",
     });
   },
   updateAdminAccountStatus: async (id: string, status: AdminAccount["status"]): Promise<AdminAccount> => {
     // TODO: Implement API endpoint for updating account status
     throw new Error("API endpoint for updating account status is not implemented yet");
   },
-  resetAdminAccountPassword: async (id: string): Promise<void> => {
-    // TODO: Implement API endpoint for resetting password
-    throw new Error("API endpoint for resetting password is not implemented yet");
+  resetAdminAccountPassword: async (
+    id: string,
+    password: string,
+    confirmPassword: string
+  ): Promise<void> => {
+    const response = await api.put(`/users/${id}/reset-password`, {
+      password,
+      confirmPassword,
+    });
+    if (response.status !== 200) {
+      throw new Error(response.data || "Không thể đặt lại mật khẩu");
+    }
+  },
+  stopDatabase: async (projectId: string | number, databaseId: string | number): Promise<void> => {
+    const response = await api.post(`/project-databases/${projectId}/${databaseId}/stop`);
+    if (response.status !== 200) {
+      throw new Error(response.data || "Không thể dừng database");
+    }
+  },
+  startDatabase: async (projectId: string | number, databaseId: string | number): Promise<void> => {
+    const response = await api.post(`/project-databases/${projectId}/${databaseId}/start`);
+    if (response.status !== 200) {
+      throw new Error(response.data || "Không thể khởi động database");
+    }
+  },
+  deleteDatabase: async (projectId: string | number, databaseId: string | number): Promise<void> => {
+    const response = await api.post(`/project-databases/${projectId}/${databaseId}/delete`);
+    if (response.status !== 200) {
+      throw new Error(response.data || "Không thể xóa database");
+    }
+  },
+  stopBackend: async (projectId: string | number, backendId: string | number): Promise<void> => {
+    const response = await api.post(`/project-backends/${projectId}/${backendId}/stop`);
+    if (response.status !== 200) {
+      throw new Error(response.data || "Không thể dừng backend");
+    }
+  },
+  startBackend: async (projectId: string | number, backendId: string | number): Promise<void> => {
+    const response = await api.post(`/project-backends/${projectId}/${backendId}/start`);
+    if (response.status !== 200) {
+      throw new Error(response.data || "Không thể khởi động backend");
+    }
+  },
+  deleteBackend: async (projectId: string | number, backendId: string | number): Promise<void> => {
+    const response = await api.post(`/project-backends/${projectId}/${backendId}/delete`);
+    if (response.status !== 200) {
+      throw new Error(response.data || "Không thể xóa backend");
+    }
+  },
+  stopFrontend: async (projectId: string | number, frontendId: string | number): Promise<void> => {
+    const response = await api.post(`/project-frontends/${projectId}/${frontendId}/stop`);
+    if (response.status !== 200) {
+      throw new Error(response.data || "Không thể dừng frontend");
+    }
+  },
+  startFrontend: async (projectId: string | number, frontendId: string | number): Promise<void> => {
+    const response = await api.post(`/project-frontends/${projectId}/${frontendId}/start`);
+    if (response.status !== 200) {
+      throw new Error(response.data || "Không thể khởi động frontend");
+    }
+  },
+  deleteFrontend: async (projectId: string | number, frontendId: string | number): Promise<void> => {
+    const response = await api.post(`/project-frontends/${projectId}/${frontendId}/delete`);
+    if (response.status !== 200) {
+      throw new Error(response.data || "Không thể xóa frontend");
+    }
+  },
+  updateAdminAccount: async (
+    id: string,
+    data: {
+      fullname?: string;
+      tier?: "STANDARD" | "PREMIUM";
+      role?: "ADMIN" | "USER";
+    }
+  ): Promise<AdminAccount> => {
+    const response = await api.put(`/users/${id}`, {
+      fullname: data.fullname,
+      tier: data.tier,
+      role: data.role,
+    });
+    if (response.status !== 200) {
+      throw new Error(response.data || "Không thể cập nhật tài khoản");
+    }
+    return mapUserSummaryToAdminAccount(response.data);
+  },
+  deleteAdminAccount: async (id: string, currentUsername: string): Promise<void> => {
+    const response = await api.delete(`/users/${id}`, {
+      params: { currentUsername },
+    });
+    if (response.status !== 200) {
+      throw new Error(response.data || "Không thể xóa tài khoản");
+    }
   },
   // Cluster Resources
   getClusterCapacity: async (): Promise<ClusterCapacityResponse> => {
@@ -1652,6 +1743,7 @@ export const adminAPI = {
   getAnsibleConfig: infrastructureAPI.getAnsibleConfig,
   verifyAnsibleConfig: infrastructureAPI.verifyAnsibleConfig,
   saveAnsibleConfig: infrastructureAPI.saveAnsibleConfig,
+  updateAnsibleConfig: infrastructureAPI.updateAnsibleConfig,
   getAnsibleInitStatus: infrastructureAPI.getAnsibleInitStatus,
   initAnsibleStep1: infrastructureAPI.initAnsibleStep1,
   initAnsibleStep2: infrastructureAPI.initAnsibleStep2,
@@ -1663,6 +1755,9 @@ export const adminAPI = {
   uploadPlaybookFile: infrastructureAPI.uploadPlaybookFile,
   executePlaybook: infrastructureAPI.executePlaybook,
   getPlaybookExecutionStatus: infrastructureAPI.getPlaybookExecutionStatus,
+  
+  // Docker
+  checkDockerStatus: infrastructureAPI.checkDockerStatus,
   
   // Cluster Management
   getClusterInfo: infrastructureAPI.getClusterInfo,

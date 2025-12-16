@@ -114,15 +114,14 @@ public class AnsibleServiceImpl extends BaseKubernetesService implements Ansible
     }
 
     /**
-     * Kiểm tra trạng thái Ansible trên controller server (server có role ANSIBLE hoặc MASTER).
+     * Kiểm tra trạng thái Ansible trên controller server (server có role ANSIBLE).
      * 
      * Quy trình xử lý:
-     * 1. Tìm server có role ANSIBLE và status ONLINE (ưu tiên)
-     * 2. Nếu không có ANSIBLE, tìm server có role MASTER và status ONLINE
-     * 3. Kết nối SSH đến server đó
-     * 4. Thực thi lệnh "ansible --version" để kiểm tra xem Ansible có được cài đặt không
-     * 5. Parse output để lấy version (ví dụ: "ansible 2.15.0")
-     * 6. Trả về AnsibleStatusResponse với thông tin installed, version, controllerHost, controllerRole
+     * 1. Tìm server có role ANSIBLE và status ONLINE
+     * 2. Kết nối SSH đến server đó
+     * 3. Thực thi lệnh "ansible --version" để kiểm tra xem Ansible có được cài đặt không
+     * 4. Parse output để lấy version (ví dụ: "ansible 2.15.0")
+     * 5. Trả về AnsibleStatusResponse với thông tin installed, version, controllerHost, controllerRole
      * 
      * @return AnsibleStatusResponse chứa thông tin trạng thái Ansible
      */
@@ -131,33 +130,31 @@ public class AnsibleServiceImpl extends BaseKubernetesService implements Ansible
         AnsibleStatusResponse response = new AnsibleStatusResponse();
         
         try {
-            // Bước 1: Tìm server có role ANSIBLE và status ONLINE (ưu tiên)
+            // Bước 1: Kiểm tra có server với role ANSIBLE không
             List<ServerEntity> allServers = serverRepository.findAll();
             ServerEntity controllerServer = allServers.stream()
-                    .filter(s -> s != null 
-                            && "ANSIBLE".equals(s.getRole())
-                            && s.getStatus() == ServerEntity.ServerStatus.ONLINE)
+                    .filter(s -> s != null && "ANSIBLE".equals(s.getRole()))
                     .findFirst()
                     .orElse(null);
             
-            // Bước 2: Nếu không có ANSIBLE, tìm server có role MASTER và status ONLINE
-            if (controllerServer == null) {
-                controllerServer = allServers.stream()
-                        .filter(s -> s != null 
-                                && "MASTER".equals(s.getRole())
-                                && s.getStatus() == ServerEntity.ServerStatus.ONLINE)
-                        .findFirst()
-                        .orElse(null);
-            }
-            
-            // Nếu không tìm thấy controller server
+            // Nếu không tìm thấy server với role ANSIBLE
             if (controllerServer == null) {
                 response.setInstalled(false);
-                response.setError("Không tìm thấy server controller (ANSIBLE hoặc MASTER) với trạng thái ONLINE. Vui lòng thêm server với role ANSIBLE hoặc MASTER và đảm bảo server đang online.");
+                response.setError("Không tìm thấy server với role ANSIBLE. Vui lòng thêm server với role ANSIBLE trong trang Servers.");
                 return response;
             }
             
-            // Set thông tin controller
+            // Bước 2: Kiểm tra server ANSIBLE có online không
+            if (controllerServer.getStatus() != ServerEntity.ServerStatus.ONLINE) {
+                response.setInstalled(false);
+                response.setError("Server với role ANSIBLE (IP: " + controllerServer.getIp() + ") đang offline. Vui lòng đảm bảo server đang online.");
+                // Vẫn set thông tin controller để frontend có thể hiển thị
+                response.setControllerHost(controllerServer.getIp());
+                response.setControllerRole(controllerServer.getRole());
+                return response;
+            }
+            
+            // Set thông tin controller (khi server online)
             response.setControllerHost(controllerServer.getIp());
             response.setControllerRole(controllerServer.getRole());
             

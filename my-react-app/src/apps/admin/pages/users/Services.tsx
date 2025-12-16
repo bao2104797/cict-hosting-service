@@ -179,6 +179,9 @@ export function Services() {
     const user = users.find((u) => u.id === userId);
     if (!user) return; // User not found
 
+    // Lưu userId vào localStorage khi restore từ URL
+    localStorage.setItem("selectedUserId", user.id);
+
     setSelectedUser(user);
     setView(viewParam);
 
@@ -262,6 +265,9 @@ export function Services() {
           setProjects(mappedProjects);
           const project = mappedProjects.find((p) => p.id === projectId);
           if (project) {
+            // Lưu projectId vào localStorage khi restore từ URL
+            localStorage.setItem("selectedProjectId", project.id);
+            
             setSelectedProject(project);
             setProjectDetailLoading(true);
             
@@ -338,6 +344,9 @@ export function Services() {
         setExpandedProjects(newExpandedProjects);
       }
     } else {
+      // Lưu userId vào localStorage khi chọn người dùng
+      localStorage.setItem("selectedUserId", user.id);
+      
       // Đóng tất cả users khác và projects của chúng
       setExpandedUsers(new Set([user.id]));
       setExpandedProjects(new Set());
@@ -397,6 +406,9 @@ export function Services() {
       newExpanded.delete(projectKey);
       setExpandedProjects(newExpanded);
     } else {
+      // Lưu projectId vào localStorage khi expand project
+      localStorage.setItem("selectedProjectId", project.id);
+      
       newExpanded.add(projectKey);
       setExpandedProjects(newExpanded);
       
@@ -466,6 +478,9 @@ export function Services() {
   };
 
   const handleViewProject = async (project: AdminUserProject) => {
+    // Lưu projectId vào localStorage
+    localStorage.setItem("selectedProjectId", project.id);
+    
     setSelectedProject(project);
     setProjectDetail(null);
     setView("projectDetail");
@@ -527,6 +542,10 @@ export function Services() {
   };
 
   const handleBackToUsers = () => {
+    // Xóa projectId và userId khỏi localStorage khi quay lại danh sách người dùng
+    localStorage.removeItem("selectedProjectId");
+    localStorage.removeItem("selectedUserId");
+    
     setSelectedUser(null);
     setSelectedProject(null);
     setProjectDetail(null);
@@ -621,7 +640,8 @@ export function Services() {
   const handleComponentAction = async (
     component: AdminProjectComponent,
     action: "pause" | "start" | "delete" | "view",
-    resourceType?: "databases" | "backends" | "frontends"
+    resourceType?: "databases" | "backends" | "frontends",
+    projectId?: string
   ) => {
     if (action === "view") {
       if (resourceType) {
@@ -687,12 +707,257 @@ export function Services() {
       }
       return;
     }
+
+    // Xử lý các action pause, start, delete cho database
+    if (resourceType === "databases") {
+      // Lấy projectId từ parameter, selectedProject hoặc localStorage
+      const currentProjectId = projectId || selectedProject?.id || localStorage.getItem("selectedProjectId");
+      if (!currentProjectId) {
+        toast.error("Không tìm thấy thông tin dự án");
+        return;
+      }
+      
+      try {
+        const databaseId = component.id;
+        
+        if (action === "pause") {
+          await adminAPI.stopDatabase(currentProjectId, databaseId);
+          toast.success(`Đã tạm dừng ${component.name}`);
+        } else if (action === "start") {
+          await adminAPI.startDatabase(currentProjectId, databaseId);
+          toast.success(`Đã khởi động ${component.name}`);
+        } else if (action === "delete") {
+          await adminAPI.deleteDatabase(currentProjectId, databaseId);
+          toast.success(`Đã xóa ${component.name}`);
+        }
+        
+        // Reload project detail sau khi thực hiện action
+        try {
+          const resourceDetail = await adminAPI.getProjectResources(currentProjectId);
+          const mappedDetail: AdminProjectDetail = {
+            id: String(resourceDetail.projectId),
+            name: resourceDetail.projectName,
+            databases: resourceDetail.databases.map((db) => ({
+              id: String(db.id),
+              name: `database-${db.id}`,
+              status: db.status.toLowerCase() as "running" | "stopped" | "error",
+              cpu: `${db.cpuCores} cores`,
+              memory: `${db.memoryGb} GB`,
+              cpuUsed: `${db.cpuCores} cores`,
+              memoryUsed: `${db.memoryGb} GB`,
+              projectName: db.projectName,
+            })),
+            backends: resourceDetail.backends.map((be) => ({
+              id: String(be.id),
+              name: `backend-${be.id}`,
+              status: be.status.toLowerCase() as "running" | "stopped" | "error",
+              cpu: `${be.cpuCores} cores`,
+              memory: `${be.memoryGb} GB`,
+              cpuUsed: `${be.cpuCores} cores`,
+              memoryUsed: `${be.memoryGb} GB`,
+              projectName: be.projectName,
+            })),
+            frontends: resourceDetail.frontends.map((fe) => ({
+              id: String(fe.id),
+              name: `frontend-${fe.id}`,
+              status: fe.status.toLowerCase() as "running" | "stopped" | "error",
+              cpu: `${fe.cpuCores} cores`,
+              memory: `${fe.memoryGb} GB`,
+              cpuUsed: `${fe.cpuCores} cores`,
+              memoryUsed: `${fe.memoryGb} GB`,
+              projectName: fe.projectName,
+            })),
+          };
+          // Cập nhật projectDetail nếu đang ở projectDetail view
+          if (selectedProject && selectedProject.id === currentProjectId) {
+            setProjectDetail(mappedDetail);
+          }
+          
+          // Cập nhật projectDetailsMap cho expanded view
+          setProjectDetailsMap(prev => ({
+            ...prev,
+            [currentProjectId]: { detail: mappedDetail, loading: false }
+          }));
+        } catch (error) {
+          console.error("Error reloading project detail:", error);
+        }
+      } catch (error: any) {
+        const errorMessage = error?.response?.data || error?.message || `Không thể ${action === "pause" ? "tạm dừng" : action === "start" ? "khởi động" : "xóa"} database`;
+        toast.error(errorMessage);
+        console.error(`Error ${action} database:`, error);
+      }
+      return;
+    }
+
+    // Xử lý các action pause, start, delete cho backend
+    if (resourceType === "backends") {
+      // Lấy projectId từ parameter, selectedProject hoặc localStorage
+      const currentProjectId = projectId || selectedProject?.id || localStorage.getItem("selectedProjectId");
+      if (!currentProjectId) {
+        toast.error("Không tìm thấy thông tin dự án");
+        return;
+      }
+      
+      try {
+        const backendId = component.id;
+        
+        if (action === "pause") {
+          await adminAPI.stopBackend(currentProjectId, backendId);
+          toast.success(`Đã tạm dừng ${component.name}`);
+        } else if (action === "start") {
+          await adminAPI.startBackend(currentProjectId, backendId);
+          toast.success(`Đã khởi động ${component.name}`);
+        } else if (action === "delete") {
+          await adminAPI.deleteBackend(currentProjectId, backendId);
+          toast.success(`Đã xóa ${component.name}`);
+        }
+        
+        // Reload project detail sau khi thực hiện action
+        try {
+          const resourceDetail = await adminAPI.getProjectResources(currentProjectId);
+          const mappedDetail: AdminProjectDetail = {
+            id: String(resourceDetail.projectId),
+            name: resourceDetail.projectName,
+            databases: resourceDetail.databases.map((db) => ({
+              id: String(db.id),
+              name: `database-${db.id}`,
+              status: db.status.toLowerCase() as "running" | "stopped" | "error",
+              cpu: `${db.cpuCores} cores`,
+              memory: `${db.memoryGb} GB`,
+              cpuUsed: `${db.cpuCores} cores`,
+              memoryUsed: `${db.memoryGb} GB`,
+              projectName: db.projectName,
+            })),
+            backends: resourceDetail.backends.map((be) => ({
+              id: String(be.id),
+              name: `backend-${be.id}`,
+              status: be.status.toLowerCase() as "running" | "stopped" | "error",
+              cpu: `${be.cpuCores} cores`,
+              memory: `${be.memoryGb} GB`,
+              cpuUsed: `${be.cpuCores} cores`,
+              memoryUsed: `${be.memoryGb} GB`,
+              projectName: be.projectName,
+            })),
+            frontends: resourceDetail.frontends.map((fe) => ({
+              id: String(fe.id),
+              name: `frontend-${fe.id}`,
+              status: fe.status.toLowerCase() as "running" | "stopped" | "error",
+              cpu: `${fe.cpuCores} cores`,
+              memory: `${fe.memoryGb} GB`,
+              cpuUsed: `${fe.cpuCores} cores`,
+              memoryUsed: `${fe.memoryGb} GB`,
+              projectName: fe.projectName,
+            })),
+          };
+          // Cập nhật projectDetail nếu đang ở projectDetail view
+          if (selectedProject && selectedProject.id === currentProjectId) {
+            setProjectDetail(mappedDetail);
+          }
+          
+          // Cập nhật projectDetailsMap cho expanded view
+          setProjectDetailsMap(prev => ({
+            ...prev,
+            [currentProjectId]: { detail: mappedDetail, loading: false }
+          }));
+        } catch (error) {
+          console.error("Error reloading project detail:", error);
+        }
+      } catch (error: any) {
+        const errorMessage = error?.response?.data || error?.message || `Không thể ${action === "pause" ? "tạm dừng" : action === "start" ? "khởi động" : "xóa"} backend`;
+        toast.error(errorMessage);
+        console.error(`Error ${action} backend:`, error);
+      }
+      return;
+    }
+
+    // Xử lý các action pause, start, delete cho frontend
+    if (resourceType === "frontends") {
+      // Lấy projectId từ parameter, selectedProject hoặc localStorage
+      const currentProjectId = projectId || selectedProject?.id || localStorage.getItem("selectedProjectId");
+      if (!currentProjectId) {
+        toast.error("Không tìm thấy thông tin dự án");
+        return;
+      }
+      
+      try {
+        const frontendId = component.id;
+        
+        if (action === "pause") {
+          await adminAPI.stopFrontend(currentProjectId, frontendId);
+          toast.success(`Đã tạm dừng ${component.name}`);
+        } else if (action === "start") {
+          await adminAPI.startFrontend(currentProjectId, frontendId);
+          toast.success(`Đã khởi động ${component.name}`);
+        } else if (action === "delete") {
+          await adminAPI.deleteFrontend(currentProjectId, frontendId);
+          toast.success(`Đã xóa ${component.name}`);
+        }
+        
+        // Reload project detail sau khi thực hiện action
+        try {
+          const resourceDetail = await adminAPI.getProjectResources(currentProjectId);
+          const mappedDetail: AdminProjectDetail = {
+            id: String(resourceDetail.projectId),
+            name: resourceDetail.projectName,
+            databases: resourceDetail.databases.map((db) => ({
+              id: String(db.id),
+              name: `database-${db.id}`,
+              status: db.status.toLowerCase() as "running" | "stopped" | "error",
+              cpu: `${db.cpuCores} cores`,
+              memory: `${db.memoryGb} GB`,
+              cpuUsed: `${db.cpuCores} cores`,
+              memoryUsed: `${db.memoryGb} GB`,
+              projectName: db.projectName,
+            })),
+            backends: resourceDetail.backends.map((be) => ({
+              id: String(be.id),
+              name: `backend-${be.id}`,
+              status: be.status.toLowerCase() as "running" | "stopped" | "error",
+              cpu: `${be.cpuCores} cores`,
+              memory: `${be.memoryGb} GB`,
+              cpuUsed: `${be.cpuCores} cores`,
+              memoryUsed: `${be.memoryGb} GB`,
+              projectName: be.projectName,
+            })),
+            frontends: resourceDetail.frontends.map((fe) => ({
+              id: String(fe.id),
+              name: `frontend-${fe.id}`,
+              status: fe.status.toLowerCase() as "running" | "stopped" | "error",
+              cpu: `${fe.cpuCores} cores`,
+              memory: `${fe.memoryGb} GB`,
+              cpuUsed: `${fe.cpuCores} cores`,
+              memoryUsed: `${fe.memoryGb} GB`,
+              projectName: fe.projectName,
+            })),
+          };
+          // Cập nhật projectDetail nếu đang ở projectDetail view
+          if (selectedProject && selectedProject.id === currentProjectId) {
+            setProjectDetail(mappedDetail);
+          }
+          
+          // Cập nhật projectDetailsMap cho expanded view
+          setProjectDetailsMap(prev => ({
+            ...prev,
+            [currentProjectId]: { detail: mappedDetail, loading: false }
+          }));
+        } catch (error) {
+          console.error("Error reloading project detail:", error);
+        }
+      } catch (error: any) {
+        const errorMessage = error?.response?.data || error?.message || `Không thể ${action === "pause" ? "tạm dừng" : action === "start" ? "khởi động" : "xóa"} frontend`;
+        toast.error(errorMessage);
+        console.error(`Error ${action} frontend:`, error);
+      }
+      return;
+    }
+
+    // Fallback cho các action khác - không có
     const actionLabel =
       action === "pause" ? "tạm dừng" : action === "start" ? "chạy" : "xóa";
-    toast.success(`Đã ${actionLabel} ${component.name}`);
+    toast.info(`Chức năng ${actionLabel} cho ${resourceType} đang được phát triển`);
   };
 
-  const renderComponents = (items: AdminProjectComponent[], type: "databases" | "backends" | "frontends") => {
+  const renderComponents = (items: AdminProjectComponent[], type: "databases" | "backends" | "frontends", projectId?: string) => {
     const metricLabel = (metric: "cpu" | "memory", item: AdminProjectComponent) => {
       if (type === "backends" || type === "frontends" || item.projectName) {
         return metric === "cpu" ? "CPU đang dùng" : "Memory đang dùng";
@@ -1815,13 +2080,13 @@ export function Services() {
                                                                 </TabsTrigger>
                                                               </TabsList>
                                                               <TabsContent value="databases" className="mt-0">
-                                                                {renderComponents(projectDetail.detail.databases, "databases")}
+                                                                {renderComponents(projectDetail.detail.databases, "databases", project.id)}
                                                               </TabsContent>
                                                               <TabsContent value="backends" className="mt-0">
-                                                                {renderComponents(projectDetail.detail.backends, "backends")}
+                                                                {renderComponents(projectDetail.detail.backends, "backends", project.id)}
                                                               </TabsContent>
                                                               <TabsContent value="frontends" className="mt-0">
-                                                                {renderComponents(projectDetail.detail.frontends, "frontends")}
+                                                                {renderComponents(projectDetail.detail.frontends, "frontends", project.id)}
                                                               </TabsContent>
                                                             </Tabs>
                                                           ) : (
@@ -2070,13 +2335,13 @@ export function Services() {
                     </TabsTrigger>
                   </TabsList>
                   <TabsContent value="databases" className="pt-4">
-                    {renderComponents(projectDetail.databases, "databases")}
+                    {renderComponents(projectDetail.databases, "databases", selectedProject?.id)}
                   </TabsContent>
                   <TabsContent value="backends" className="pt-4">
-                    {renderComponents(projectDetail.backends, "backends")}
+                    {renderComponents(projectDetail.backends, "backends", selectedProject?.id)}
                   </TabsContent>
                   <TabsContent value="frontends" className="pt-4">
-                    {renderComponents(projectDetail.frontends, "frontends")}
+                    {renderComponents(projectDetail.frontends, "frontends", selectedProject?.id)}
                   </TabsContent>
                 </Tabs>
               </CardContent>

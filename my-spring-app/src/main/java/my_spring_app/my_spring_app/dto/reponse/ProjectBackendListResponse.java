@@ -34,6 +34,8 @@ public class ProjectBackendListResponse {
         private String dockerImage;
         private String domainNameSystem;
         private String status; // RUNNING, STOPPED, ERROR
+        private String cpu; // CPU usage từ Kubernetes (ví dụ: "100m", "1.5")
+        private String memory; // Memory usage từ Kubernetes (ví dụ: "256Mi", "1Gi")
         private LocalDateTime createdAt;
     }
 }

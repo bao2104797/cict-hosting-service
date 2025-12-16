@@ -954,6 +954,30 @@ export const infrastructureAPI = {
     }
   },
 
+  /**
+   * Kiểm tra trạng thái Docker trên server có role=DOCKER
+   */
+  checkDockerStatus: async (): Promise<{
+    installed: boolean;
+    version?: string;
+    dockerHost?: string;
+    dockerRole?: string;
+    error?: string;
+  }> => {
+    try {
+      const response = await api.get("/install/docker/status");
+      return response.data;
+    } catch (error: any) {
+      console.error("Error checking Docker status:", error);
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
+        "Không thể kiểm tra trạng thái Docker";
+      throw new Error(errorMessage);
+    }
+  },
+
   // ==================== Init Ansible (4 steps) ====================
 
   /**
@@ -1106,9 +1130,7 @@ export const infrastructureAPI = {
     error?: string;
   }> => {
     try {
-      const response = await api.get("/admin/ansible/config", {
-        params: controllerHost ? { controllerHost } : {},
-      });
+      const response = await api.get("/install/ansible/config");
       return {
         success: response.data.success !== false,
         controllerHost: response.data.controllerHost,
@@ -1179,7 +1201,7 @@ export const infrastructureAPI = {
     sudoPassword?: string
   ): Promise<{ success: boolean; message: string; error?: string }> => {
     try {
-      const response = await api.post("/admin/ansible/config/save", {
+      const response = await api.post("/install/ansible/config", {
         controllerHost: controllerHost || null,
         ansibleCfg,
         ansibleInventory,
@@ -1198,6 +1220,28 @@ export const infrastructureAPI = {
         error.response?.data?.message ||
         error.message ||
         "Không thể lưu cấu hình Ansible";
+      throw new Error(errorMessage);
+    }
+  },
+
+  /**
+   * Regenerate ansible.cfg và hosts.ini từ server list
+   */
+  updateAnsibleConfig: async (): Promise<{ success: boolean; message?: string; error?: string }> => {
+    try {
+      const response = await api.post("/install/ansible/config/regenerate");
+      return {
+        success: response.data.success !== false,
+        message: response.data.message || "Đã cập nhật cấu hình Ansible",
+        error: response.data.error,
+      };
+    } catch (error: any) {
+      console.error("Error updating Ansible config:", error);
+      const errorMessage =
+        error.response?.data?.error ||
+        error.response?.data?.message ||
+        error.message ||
+        "Không thể cập nhật cấu hình Ansible";
       throw new Error(errorMessage);
     }
   },

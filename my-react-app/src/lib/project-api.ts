@@ -247,6 +247,8 @@ export interface DatabaseInfo {
   databaseUsername: string
   databasePassword: string
   status: string // RUNNING, STOPPED, ERROR
+  cpu?: string // CPU usage
+  memory?: string // Memory usage
   createdAt: string
 }
 
@@ -292,6 +294,8 @@ export interface BackendInfo {
   replicas?: number
   maxReplicas?: number
   status: string // RUNNING, STOPPED, ERROR
+  cpu?: string // CPU usage từ Kubernetes (ví dụ: "100m", "1.5")
+  memory?: string // Memory usage từ Kubernetes (ví dụ: "256Mi", "1Gi")
   createdAt: string
 }
 
@@ -474,6 +478,8 @@ export interface FrontendInfo {
   replicas?: number
   maxReplicas?: number
   status: string // RUNNING, STOPPED, ERROR
+  cpu?: string // CPU usage
+  memory?: string // Memory usage
   createdAt: string
 }
 
@@ -546,6 +552,43 @@ export async function getProjectDeploymentHistory(projectId: string | number): P
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: "Có lỗi xảy ra khi lấy lịch sử triển khai" }))
     throw new Error(error.message || "Có lỗi xảy ra khi lấy lịch sử triển khai")
+  }
+
+  return response.json()
+}
+
+/**
+ * Lịch sử yêu cầu
+ */
+export interface ProjectRequestHistoryResponse {
+  projectId: number
+  projectName: string
+  requestItems: RequestHistoryItem[]
+}
+
+export interface RequestHistoryItem {
+  type: "BACKEND" | "FRONTEND"
+  id: number
+  componentId: number
+  componentName: string
+  oldReplicas: number
+  newReplicas: number
+  status: "PENDING" | "APPROVED" | "REJECTED"
+  reasonReject?: string | null
+  createdAt: string // ISO date string
+}
+
+export async function getProjectRequestHistory(projectId: string | number): Promise<ProjectRequestHistoryResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/request-history`, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: "Có lỗi xảy ra khi lấy lịch sử yêu cầu" }))
+    throw new Error(error.message || "Có lỗi xảy ra khi lấy lịch sử yêu cầu")
   }
 
   return response.json()

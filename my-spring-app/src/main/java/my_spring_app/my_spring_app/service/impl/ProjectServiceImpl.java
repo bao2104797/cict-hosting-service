@@ -9,7 +9,12 @@ import my_spring_app.my_spring_app.dto.reponse.ProjectFrontendListResponse;
 import my_spring_app.my_spring_app.dto.reponse.ProjectOverviewResponse;
 import my_spring_app.my_spring_app.dto.reponse.ProjectSummaryResponse;
 import my_spring_app.my_spring_app.dto.reponse.ProjectDeploymentHistoryResponse;
+import my_spring_app.my_spring_app.dto.reponse.ProjectRequestHistoryResponse;
 import my_spring_app.my_spring_app.dto.request.CreateProjectRequest;
+import my_spring_app.my_spring_app.entity.BackendRequestEntity;
+import my_spring_app.my_spring_app.entity.FrontendRequestEntity;
+import my_spring_app.my_spring_app.repository.BackendRequestRepository;
+import my_spring_app.my_spring_app.repository.FrontendRequestRepository;
 import com.jcraft.jsch.*;
 import io.kubernetes.client.openapi.ApiClient;
 import io.kubernetes.client.openapi.ApiException;
@@ -54,6 +59,12 @@ public class ProjectServiceImpl extends BaseKubernetesService implements Project
 
     @Autowired
     private ServerRepository serverRepository;
+    
+    @Autowired
+    private BackendRequestRepository backendRequestRepository;
+    
+    @Autowired
+    private FrontendRequestRepository frontendRequestRepository;
 
     @Override
     public CreateProjectResponse createProject(CreateProjectRequest request) {
@@ -446,6 +457,19 @@ public class ProjectServiceImpl extends BaseKubernetesService implements Project
                 ? projectWithDatabases.getDatabases() 
                 : (project.getDatabases() != null ? project.getDatabases() : new java.util.ArrayList<>());
 
+        // Lấy master server và tạo SSH session để lấy metrics từ Kubernetes
+        Session session = null;
+        try {
+            ServerEntity masterServer = getMasterServer();
+            session = createSession(masterServer);
+        } catch (Exception e) {
+            System.err.println("[getProjectDatabases] Không thể tạo SSH session để lấy metrics: " + e.getMessage());
+            // Tiếp tục mà không có metrics
+        }
+
+        final Session finalSession = session;
+        final String namespace = project.getNamespace();
+
         // Map databases sang DTO
         List<ProjectDatabaseListResponse.DatabaseInfo> databaseInfos = databases.stream()
                 .map(db -> {
@@ -461,9 +485,63 @@ public class ProjectServiceImpl extends BaseKubernetesService implements Project
                     info.setDatabasePassword(db.getDatabasePassword());
                     info.setStatus(db.getStatus());
                     info.setCreatedAt(db.getCreatedAt());
+
+                    // Lấy CPU và Memory từ Kubernetes dựa vào uuid_k8s và namespace
+                    if (finalSession != null && namespace != null && db.getUuid_k8s() != null && !db.getUuid_k8s().isEmpty()) {
+                        try {
+                            // Sử dụng cú pháp: kubectl top pod -n <namespace> | grep <db-uuid>
+                            // Ví dụ: kubectl top pod -n ns-1b27c3a13de1 | grep db-0b007a05d0b0
+                            String podNamePrefix = "db-" + db.getUuid_k8s();
+                            String cmd = String.format("kubectl top pod -n %s | grep %s", namespace, podNamePrefix);
+                            String output = executeCommand(finalSession, cmd, true);
+                            
+                            if (output != null && !output.trim().isEmpty()) {
+                                String[] lines = output.split("\\r?\\n");
+                                double totalCpu = 0.0;
+                                long totalMemory = 0L;
+                                
+                                for (String line : lines) {
+                                    line = line.trim();
+                                    if (line.isEmpty()) {
+                                        continue;
+                                    }
+                                    String[] parts = line.split("\\s+");
+                                    if (parts.length >= 3) {
+                                        try {
+                                            double cpu = parseCpuCores(parts[1]);
+                                            long memory = parseMemoryBytes(parts[2]);
+                                            totalCpu += cpu;
+                                            totalMemory += memory;
+                                        } catch (NumberFormatException ex) {
+                                            // Bỏ qua dòng không parse được
+                                        }
+                                    }
+                                }
+                                
+                                info.setCpu(formatCpu(totalCpu));
+                                info.setMemory(formatMemory(totalMemory));
+                            } else {
+                                info.setCpu("0m");
+                                info.setMemory("0");
+                            }
+                        } catch (Exception e) {
+                            System.err.println("[getProjectDatabases] Lỗi khi lấy metrics cho database " + db.getId() + ": " + e.getMessage());
+                            info.setCpu("0m");
+                            info.setMemory("0");
+                        }
+                    } else {
+                        info.setCpu("0m");
+                        info.setMemory("0");
+                    }
+
                     return info;
                 })
                 .collect(Collectors.toList());
+
+        // Đóng SSH session
+        if (session != null && session.isConnected()) {
+            session.disconnect();
+        }
 
         // Tạo response
         ProjectDatabaseListResponse response = new ProjectDatabaseListResponse();
@@ -492,6 +570,19 @@ public class ProjectServiceImpl extends BaseKubernetesService implements Project
                 ? projectWithBackends.getBackends() 
                 : (project.getBackends() != null ? project.getBackends() : new java.util.ArrayList<>());
 
+        // Lấy master server và tạo SSH session để lấy metrics từ Kubernetes
+        Session session = null;
+        try {
+            ServerEntity masterServer = getMasterServer();
+            session = createSession(masterServer);
+        } catch (Exception e) {
+            System.err.println("[getProjectBackends] Không thể tạo SSH session để lấy metrics: " + e.getMessage());
+            // Tiếp tục mà không có metrics
+        }
+
+        final Session finalSession = session;
+        final String namespace = project.getNamespace();
+
         // Map backends sang DTO
         List<ProjectBackendListResponse.BackendInfo> backendInfos = backends.stream()
                 .map(be -> {
@@ -513,9 +604,63 @@ public class ProjectServiceImpl extends BaseKubernetesService implements Project
                     info.setDomainNameSystem(be.getDomainNameSystem());
                     info.setStatus(be.getStatus());
                     info.setCreatedAt(be.getCreatedAt());
+
+                    // Lấy CPU và Memory từ Kubernetes dựa vào uuid_k8s và namespace
+                    if (finalSession != null && namespace != null && be.getUuid_k8s() != null && !be.getUuid_k8s().isEmpty()) {
+                        try {
+                            // Sử dụng cú pháp: kubectl top pod -n <namespace> | grep <app-uuid>
+                            // Ví dụ: kubectl top pod -n ns-1b27c3a13de1 | grep app-0b007a05d0b0
+                            String podNamePrefix = "app-" + be.getUuid_k8s();
+                            String cmd = String.format("kubectl top pod -n %s | grep %s", namespace, podNamePrefix);
+                            String output = executeCommand(finalSession, cmd, true);
+                            
+                            if (output != null && !output.trim().isEmpty()) {
+                                String[] lines = output.split("\\r?\\n");
+                                double totalCpu = 0.0;
+                                long totalMemory = 0L;
+                                
+                                for (String line : lines) {
+                                    line = line.trim();
+                                    if (line.isEmpty()) {
+                                        continue;
+                                    }
+                                    String[] parts = line.split("\\s+");
+                                    if (parts.length >= 3) {
+                                        try {
+                                            double cpu = parseCpuCores(parts[1]);
+                                            long memory = parseMemoryBytes(parts[2]);
+                                            totalCpu += cpu;
+                                            totalMemory += memory;
+                                        } catch (NumberFormatException ex) {
+                                            // Bỏ qua dòng không parse được
+                                        }
+                                    }
+                                }
+                                
+                                info.setCpu(formatCpu(totalCpu));
+                                info.setMemory(formatMemory(totalMemory));
+                            } else {
+                                info.setCpu("0m");
+                                info.setMemory("0");
+                            }
+                        } catch (Exception e) {
+                            System.err.println("[getProjectBackends] Lỗi khi lấy metrics cho backend " + be.getId() + ": " + e.getMessage());
+                            info.setCpu("0m");
+                            info.setMemory("0");
+                        }
+                    } else {
+                        info.setCpu("0m");
+                        info.setMemory("0");
+                    }
+
                     return info;
                 })
                 .collect(Collectors.toList());
+
+        // Đóng SSH session
+        if (session != null && session.isConnected()) {
+            session.disconnect();
+        }
 
         // Tạo response
         ProjectBackendListResponse response = new ProjectBackendListResponse();
@@ -544,6 +689,19 @@ public class ProjectServiceImpl extends BaseKubernetesService implements Project
                 ? projectWithFrontends.getFrontends() 
                 : (project.getFrontends() != null ? project.getFrontends() : new java.util.ArrayList<>());
 
+        // Lấy master server và tạo SSH session để lấy metrics từ Kubernetes
+        Session session = null;
+        try {
+            ServerEntity masterServer = getMasterServer();
+            session = createSession(masterServer);
+        } catch (Exception e) {
+            System.err.println("[getProjectFrontends] Không thể tạo SSH session để lấy metrics: " + e.getMessage());
+            // Tiếp tục mà không có metrics
+        }
+
+        final Session finalSession = session;
+        final String namespace = project.getNamespace();
+
         // Map frontends sang DTO
         List<ProjectFrontendListResponse.FrontendInfo> frontendInfos = frontends.stream()
                 .map(fe -> {
@@ -560,9 +718,63 @@ public class ProjectServiceImpl extends BaseKubernetesService implements Project
                     info.setDomainNameSystem(fe.getDomainNameSystem());
                     info.setStatus(fe.getStatus());
                     info.setCreatedAt(fe.getCreatedAt());
+
+                    // Lấy CPU và Memory từ Kubernetes dựa vào uuid_k8s và namespace
+                    if (finalSession != null && namespace != null && fe.getUuid_k8s() != null && !fe.getUuid_k8s().isEmpty()) {
+                        try {
+                            // Sử dụng cú pháp: kubectl top pod -n <namespace> | grep <app-uuid>
+                            // Ví dụ: kubectl top pod -n ns-1b27c3a13de1 | grep app-0b007a05d0b0
+                            String podNamePrefix = "app-" + fe.getUuid_k8s();
+                            String cmd = String.format("kubectl top pod -n %s | grep %s", namespace, podNamePrefix);
+                            String output = executeCommand(finalSession, cmd, true);
+                            
+                            if (output != null && !output.trim().isEmpty()) {
+                                String[] lines = output.split("\\r?\\n");
+                                double totalCpu = 0.0;
+                                long totalMemory = 0L;
+                                
+                                for (String line : lines) {
+                                    line = line.trim();
+                                    if (line.isEmpty()) {
+                                        continue;
+                                    }
+                                    String[] parts = line.split("\\s+");
+                                    if (parts.length >= 3) {
+                                        try {
+                                            double cpu = parseCpuCores(parts[1]);
+                                            long memory = parseMemoryBytes(parts[2]);
+                                            totalCpu += cpu;
+                                            totalMemory += memory;
+                                        } catch (NumberFormatException ex) {
+                                            // Bỏ qua dòng không parse được
+                                        }
+                                    }
+                                }
+                                
+                                info.setCpu(formatCpu(totalCpu));
+                                info.setMemory(formatMemory(totalMemory));
+                            } else {
+                                info.setCpu("0m");
+                                info.setMemory("0");
+                            }
+                        } catch (Exception e) {
+                            System.err.println("[getProjectFrontends] Lỗi khi lấy metrics cho frontend " + fe.getId() + ": " + e.getMessage());
+                            info.setCpu("0m");
+                            info.setMemory("0");
+                        }
+                    } else {
+                        info.setCpu("0m");
+                        info.setMemory("0");
+                    }
+
                     return info;
                 })
                 .collect(Collectors.toList());
+
+        // Đóng SSH session
+        if (session != null && session.isConnected()) {
+            session.disconnect();
+        }
 
         // Tạo response
         ProjectFrontendListResponse response = new ProjectFrontendListResponse();
@@ -894,6 +1106,52 @@ public class ProjectServiceImpl extends BaseKubernetesService implements Project
         return executeCommand(session, command, false);
     }
 
+    /**
+     * Format CPU cores thành string (ví dụ: "100m", "1.5")
+     */
+    private String formatCpu(double cpuCores) {
+        if (cpuCores <= 0) {
+            return "0m";
+        }
+        if (cpuCores < 1.0) {
+            int millicores = (int) Math.round(cpuCores * 1000);
+            return millicores + "m";
+        } else {
+            return String.format("%.1f", cpuCores);
+        }
+    }
+
+    /**
+     * Format memory bytes thành string (ví dụ: "256Mi", "1Gi")
+     */
+    private String formatMemory(long memoryBytes) {
+        if (memoryBytes <= 0) {
+            return "0";
+        }
+        double bytes = (double) memoryBytes;
+        if (bytes < 1024 * 1024) {
+            double ki = bytes / 1024.0;
+            return String.format("%.1fKi", ki);
+        } else if (bytes < 1024 * 1024 * 1024) {
+            double mi = bytes / (1024.0 * 1024.0);
+            return String.format("%.1fMi", mi);
+        } else {
+            double gi = bytes / (1024.0 * 1024.0 * 1024.0);
+            return String.format("%.1fGi", gi);
+        }
+    }
+
+    /**
+     * Lấy master server từ database
+     */
+    private ServerEntity getMasterServer() {
+        Optional<ServerEntity> masterServerOptional = serverRepository.findByRole("MASTER");
+        if (masterServerOptional.isEmpty()) {
+            throw new RuntimeException("Không tìm thấy server MASTER. Vui lòng cấu hình server MASTER trong hệ thống.");
+        }
+        return masterServerOptional.get();
+    }
+
     @Override
     public ProjectDeploymentHistoryResponse getProjectDeploymentHistory(Long projectId) {
         System.out.println("[getProjectDeploymentHistory] Bắt đầu lấy lịch sử triển khai project với ID: " + projectId);
@@ -985,6 +1243,73 @@ public class ProjectServiceImpl extends BaseKubernetesService implements Project
         response.setHistoryItems(historyItems);
 
         System.out.println("[getProjectDeploymentHistory] Hoàn tất lấy lịch sử triển khai: " + historyItems.size() + " items");
+        return response;
+    }
+    
+    @Override
+    public ProjectRequestHistoryResponse getProjectRequestHistory(Long projectId) {
+        System.out.println("[getProjectRequestHistory] Bắt đầu lấy lịch sử yêu cầu project với ID: " + projectId);
+        
+        // Tìm project theo ID
+        Optional<ProjectEntity> projectOptional = projectRepository.findById(projectId);
+        if (projectOptional.isEmpty()) {
+            System.err.println("[getProjectRequestHistory] Lỗi: Project không tồn tại với ID: " + projectId);
+            throw new RuntimeException("Project không tồn tại với ID: " + projectId);
+        }
+        ProjectEntity project = projectOptional.get();
+        System.out.println("[getProjectRequestHistory] Tìm thấy project với tên: " + project.getProjectName());
+        
+        // Lấy tất cả backend requests của project
+        List<BackendRequestEntity> backendRequests = backendRequestRepository.findAllByBackend_Project_IdOrderByCreatedAtDesc(projectId);
+        System.out.println("[getProjectRequestHistory] Tìm thấy " + backendRequests.size() + " backend requests");
+        
+        // Lấy tất cả frontend requests của project
+        List<FrontendRequestEntity> frontendRequests = frontendRequestRepository.findAllByFrontend_Project_IdOrderByCreatedAtDesc(projectId);
+        System.out.println("[getProjectRequestHistory] Tìm thấy " + frontendRequests.size() + " frontend requests");
+        
+        // Tạo danh sách lịch sử yêu cầu
+        List<ProjectRequestHistoryResponse.RequestHistoryItem> requestItems = new java.util.ArrayList<>();
+        
+        // Thêm backend requests
+        for (BackendRequestEntity br : backendRequests) {
+            ProjectRequestHistoryResponse.RequestHistoryItem item = new ProjectRequestHistoryResponse.RequestHistoryItem();
+            item.setType("BACKEND");
+            item.setId(br.getId());
+            item.setComponentId(br.getBackend().getId());
+            item.setComponentName(br.getBackend().getProjectName());
+            item.setOldReplicas(br.getOldReplicas());
+            item.setNewReplicas(br.getNewReplicas());
+            item.setStatus(br.getStatus());
+            item.setReasonReject(br.getReasonReject());
+            item.setCreatedAt(br.getCreatedAt());
+            requestItems.add(item);
+        }
+        
+        // Thêm frontend requests
+        for (FrontendRequestEntity fr : frontendRequests) {
+            ProjectRequestHistoryResponse.RequestHistoryItem item = new ProjectRequestHistoryResponse.RequestHistoryItem();
+            item.setType("FRONTEND");
+            item.setId(fr.getId());
+            item.setComponentId(fr.getFrontend().getId());
+            item.setComponentName(fr.getFrontend().getProjectName());
+            item.setOldReplicas(fr.getOldReplicas());
+            item.setNewReplicas(fr.getNewReplicas());
+            item.setStatus(fr.getStatus());
+            item.setReasonReject(fr.getReasonReject());
+            item.setCreatedAt(fr.getCreatedAt());
+            requestItems.add(item);
+        }
+        
+        // Sắp xếp theo thời gian tạo (từ mới nhất đến cũ nhất)
+        requestItems.sort((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()));
+        
+        // Tạo response
+        ProjectRequestHistoryResponse response = new ProjectRequestHistoryResponse();
+        response.setProjectId(project.getId());
+        response.setProjectName(project.getProjectName());
+        response.setRequestItems(requestItems);
+        
+        System.out.println("[getProjectRequestHistory] Hoàn tất lấy lịch sử yêu cầu: " + requestItems.size() + " items");
         return response;
     }
 }

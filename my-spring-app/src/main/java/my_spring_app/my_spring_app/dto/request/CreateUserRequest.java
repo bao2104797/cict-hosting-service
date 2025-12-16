@@ -29,5 +29,8 @@ public class CreateUserRequest {
 
     // Tier: STANDARD, PREMIUM (mặc định là STANDARD nếu không cung cấp)
     private String tier; // STANDARD, PREMIUM
+
+    // Role: ADMIN, DEVOPS, USER (mặc định là USER nếu không cung cấp)
+    private String role; // ADMIN, DEVOPS, USER
 }
 

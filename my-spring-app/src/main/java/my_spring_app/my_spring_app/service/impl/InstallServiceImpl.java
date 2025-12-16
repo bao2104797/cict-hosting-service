@@ -1,11 +1,14 @@
 package my_spring_app.my_spring_app.service.impl;
 
-import my_spring_app.my_spring_app.dto.reponse.ExecuteCommandResponse;
-import my_spring_app.my_spring_app.dto.request.ExecuteCommandRequest;
+import my_spring_app.my_spring_app.dto.reponse.InstallStatusResponse;
+import my_spring_app.my_spring_app.dto.reponse.AnsibleConfigResponse;
+import my_spring_app.my_spring_app.dto.reponse.AnsibleOperationResponse;
+import my_spring_app.my_spring_app.dto.reponse.DockerStatusResponse;
+import my_spring_app.my_spring_app.dto.request.SaveAnsibleConfigRequest;
 import my_spring_app.my_spring_app.entity.ServerEntity;
 import my_spring_app.my_spring_app.repository.ServerRepository;
 import my_spring_app.my_spring_app.service.InstallService;
-import my_spring_app.my_spring_app.service.SSHService;
+import my_spring_app.my_spring_app.service.ServerService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,7 +16,30 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
+import java.util.function.Consumer;
+
+/**
+ * Class để lưu thông tin task trong cache
+ */
+class InstallTaskInfo {
+    String taskId;
+    String status; // running, completed, failed
+    StringBuilder logs;
+    Long startTime;
+    Long endTime;
+    String error;
+    
+    InstallTaskInfo(String taskId) {
+        this.taskId = taskId;
+        this.status = "running";
+        this.logs = new StringBuilder();
+        this.startTime = System.currentTimeMillis();
+        this.endTime = null;
+        this.error = null;
+    }
+}
 
 @Service
 @Transactional
@@ -23,11 +49,17 @@ public class InstallServiceImpl implements InstallService {
     private ServerRepository serverRepository;
 
     @Autowired
-    private SSHService sshService;
+    private ServerService serverService;
+
+    // Cache để lưu logs của các task đang chạy
+    private final ConcurrentHashMap<String, InstallTaskInfo> taskCache = new ConcurrentHashMap<>();
 
     @Override
     public List<String> setupAnsibleOnK8sNodes() {
         List<ServerEntity> allServers = serverRepository.findAll();
+        List<String> logs = new ArrayList<>();
+
+        // Lấy danh sách MASTER/WORKER khả dụng để tạo inventory và phân phối SSH key
         List<ServerEntity> masterAndWorker = allServers.stream()
                 .filter(s -> {
                     String role = s.getRole() != null ? s.getRole().toUpperCase(Locale.ROOT) : "";
@@ -36,19 +68,8 @@ public class InstallServiceImpl implements InstallService {
                 })
                 .collect(Collectors.toList());
 
-        List<String> logs = new ArrayList<>();
-
         if (masterAndWorker.isEmpty()) {
             logs.add("Không tìm thấy server nào có role MASTER hoặc WORKER với clusterStatus = AVAILABLE.");
-            return logs;
-        }
-
-        List<ServerEntity> ansibleServers = allServers.stream()
-                .filter(s -> "ANSIBLE".equalsIgnoreCase(s.getRole()))
-                .collect(Collectors.toList());
-
-        if (ansibleServers.isEmpty()) {
-            logs.add("Không tìm thấy server nào có role ANSIBLE để cài Ansible.");
             return logs;
         }
 
@@ -61,39 +82,28 @@ public class InstallServiceImpl implements InstallService {
             return logs;
         }
 
-        for (ServerEntity server : masterAndWorker) {
-            String header = String.format("===== Server %s (%s) role=%s =====",
-                    server.getName(), server.getIp(), server.getRole());
-            logs.add(header);
+        List<ServerEntity> ansibleServers = allServers.stream()
+                .filter(s -> "ANSIBLE".equalsIgnoreCase(s.getRole()))
+                .collect(Collectors.toList());
 
-            if (!isServerReachable(server)) {
-                logs.add("  - Không thể SSH tới server, bỏ qua.");
-                continue;
-            }
-
-            String pythonCmd = "sudo apt-get update -y && sudo apt-get install -y python3";
-            runCommandWithLog(server, "Cài đặt Python3", pythonCmd, logs);
+        if (ansibleServers.isEmpty()) {
+            logs.add("Không tìm thấy server nào có role ANSIBLE để cài Ansible.");
+            return logs;
         }
 
         ServerEntity ansibleServer = ansibleServers.get(0);
-        ServerEntity k8sControlNode = masters.get(0);
 
         String header = String.format("===== Cài Ansible trên server ANSIBLE %s (%s) =====",
                 ansibleServer.getName(), ansibleServer.getIp());
         logs.add(header);
-        logs.add(String.format("Lưu ý: MASTER %s (%s) là control node của Kubernetes cluster",
-                k8sControlNode.getName(), k8sControlNode.getIp()));
+        logs.add("Lưu ý: Python3 chỉ được cài trên server ANSIBLE (các node MASTER/WORKER sẽ được chuẩn bị sau nếu cần).");
 
         if (!isServerReachable(ansibleServer)) {
             logs.add("  - Không thể SSH tới server ANSIBLE, bỏ qua cài Ansible.");
             return logs;
         }
 
-        String sudoCmd = String.format(
-                "echo '%s ALL=(ALL) NOPASSWD: ALL' | sudo tee /etc/sudoers.d/%s >/dev/null && sudo chmod 440 /etc/sudoers.d/%s",
-                ansibleServer.getUsername(), ansibleServer.getUsername(), ansibleServer.getUsername());
-        runCommandWithLog(ansibleServer, "Thiết lập sudo NOPASSWD trên ANSIBLE", sudoCmd, logs);
-
+        // Lưu ý: Sudo NOPASSWD đã được cài đặt khi thêm server vào hệ thống, không cần thiết lập lại
         String pythonCmd = "sudo apt-get update -y && sudo apt-get install -y python3";
         runCommandWithLog(ansibleServer, "Cài đặt Python3 trên ANSIBLE", pythonCmd, logs);
 
@@ -130,6 +140,16 @@ public class InstallServiceImpl implements InstallService {
             runCommandWithLog(ansibleServer,
                     String.format("Kiểm tra SSH không mật khẩu đến %s", target.getName()),
                     testSshCmd, logs);
+        }
+
+        // Lưu ý: Sudo NOPASSWD đã được cài đặt khi thêm server vào hệ thống, chỉ kiểm tra để đảm bảo hoạt động
+        // Kiểm tra sudo không mật khẩu trên các target servers
+        for (ServerEntity target : masterAndWorker) {
+            String testSudoCmd = String.format("ssh -o StrictHostKeyChecking=no %s@%s 'sudo -n whoami 2>&1' || echo 'Sudo test'",
+                    target.getUsername(), target.getIp());
+            runCommandWithLog(ansibleServer,
+                    String.format("Kiểm tra sudo NOPASSWD trên %s", target.getName()),
+                    testSudoCmd, logs);
         }
 
         String mkdirCmd = "mkdir -p ~/ansible-k8s && cd ~/ansible-k8s && pwd";
@@ -176,6 +196,156 @@ public class InstallServiceImpl implements InstallService {
 
         logs.add("Hoàn tất cài đặt và cấu hình Ansible trên control node.");
         return logs;
+    }
+
+    @Override
+    public void setupAnsibleOnK8sNodes(String taskId) {
+        InstallTaskInfo taskInfo = new InstallTaskInfo(taskId);
+        taskCache.put(taskId, taskInfo);
+        
+        try {
+            List<ServerEntity> allServers = serverRepository.findAll();
+
+            // Lấy danh sách MASTER/WORKER khả dụng để tạo inventory và phân phối SSH key
+            List<ServerEntity> masterAndWorker = allServers.stream()
+                    .filter(s -> {
+                        String role = s.getRole() != null ? s.getRole().toUpperCase(Locale.ROOT) : "";
+                        String clusterStatus = s.getClusterStatus() != null ? s.getClusterStatus().toUpperCase(Locale.ROOT) : "";
+                        return ("MASTER".equals(role) || "WORKER".equals(role)) && "AVAILABLE".equals(clusterStatus);
+                    })
+                    .collect(Collectors.toList());
+
+            if (masterAndWorker.isEmpty()) {
+                appendToTaskLog(taskId, "Không tìm thấy server nào có role MASTER hoặc WORKER với clusterStatus = AVAILABLE.\n");
+                // Không fail hẳn task, nhưng không thể phân phối SSH key/inventory
+            }
+
+            List<ServerEntity> ansibleServers = allServers.stream()
+                    .filter(s -> "ANSIBLE".equalsIgnoreCase(s.getRole()))
+                    .collect(Collectors.toList());
+
+            if (ansibleServers.isEmpty()) {
+                appendToTaskLog(taskId, "Không tìm thấy server nào có role ANSIBLE để cài Ansible.\n");
+                markTaskFailed(taskId, "Không tìm thấy server ANSIBLE");
+                return;
+            }
+
+            ServerEntity ansibleServer = ansibleServers.get(0);
+
+            String header = String.format("===== Cài Ansible trên server ANSIBLE %s (%s) =====\n",
+                    ansibleServer.getName(), ansibleServer.getIp());
+            appendToTaskLog(taskId, header);
+            appendToTaskLog(taskId, "Lưu ý: Python3 chỉ được cài trên server ANSIBLE (các node MASTER/WORKER sẽ được chuẩn bị sau nếu cần)\n");
+
+            if (!isServerReachable(ansibleServer)) {
+                appendToTaskLog(taskId, "  - Không thể SSH tới server ANSIBLE, bỏ qua cài Ansible.\n");
+                markTaskFailed(taskId, "Không thể SSH tới server ANSIBLE");
+                return;
+            }
+
+            // Lưu ý: Sudo NOPASSWD đã được cài đặt khi thêm server vào hệ thống, không cần thiết lập lại
+            String pythonCmd = "sudo apt-get update -y && sudo apt-get install -y python3";
+            runCommandWithLog(taskId, ansibleServer, "Cài đặt Python3 trên ANSIBLE", pythonCmd);
+
+            String ansibleInstallCmd = String.join(" && ",
+                    "sudo apt-get update -y",
+                    "sudo apt-get install -y software-properties-common sshpass",
+                    "sudo add-apt-repository --yes --update ppa:ansible/ansible",
+                    "sudo apt-get update -y",
+                    "sudo apt-get install -y ansible",
+                    "which ansible && ansible --version || (echo 'Ansible chưa được cài đặt, thử cài lại...' && sudo apt-get install -y ansible && ansible --version)"
+            );
+            runCommandWithLog(taskId, ansibleServer, "Cài đặt Ansible và sshpass trên server ANSIBLE", ansibleInstallCmd);
+
+            String sshKeyPath = "~/.ssh/id_ed25519";
+            String sshKeyGenCmd = String.format(
+                    "if [ ! -f %s ]; then ssh-keygen -t ed25519 -C \"%s@%s\" -f %s -N \"\"; else echo 'SSH key đã tồn tại'; fi",
+                    sshKeyPath, ansibleServer.getUsername(), ansibleServer.getIp(), sshKeyPath
+            );
+            runCommandWithLog(taskId, ansibleServer, "Tạo SSH key (nếu chưa có)", sshKeyGenCmd);
+
+            for (ServerEntity target : masterAndWorker) {
+                String sshCopyIdCmd = String.format(
+                        "sshpass -p '%s' ssh-copy-id -o StrictHostKeyChecking=no -i %s.pub %s@%s || echo 'Đã có key hoặc lỗi copy'",
+                        target.getPassword(), sshKeyPath, target.getUsername(), target.getIp()
+                );
+                runCommandWithLog(taskId, ansibleServer,
+                        String.format("Copy SSH key đến %s (%s)", target.getName(), target.getIp()),
+                        sshCopyIdCmd);
+            }
+
+            for (ServerEntity target : masterAndWorker) {
+                String testSshCmd = String.format("ssh -o StrictHostKeyChecking=no %s@%s 'hostname' || echo 'SSH test failed'",
+                        target.getUsername(), target.getIp());
+                runCommandWithLog(taskId, ansibleServer,
+                        String.format("Kiểm tra SSH không mật khẩu đến %s", target.getName()),
+                        testSshCmd);
+            }
+
+            // Lưu ý: Sudo NOPASSWD đã được cài đặt khi thêm server vào hệ thống, chỉ kiểm tra để đảm bảo hoạt động
+            // Kiểm tra sudo không mật khẩu trên các target servers
+            for (ServerEntity target : masterAndWorker) {
+                String testSudoCmd = String.format("ssh -o StrictHostKeyChecking=no %s@%s 'sudo -n whoami 2>&1' || echo 'Sudo test'",
+                        target.getUsername(), target.getIp());
+                runCommandWithLog(taskId, ansibleServer,
+                        String.format("Kiểm tra sudo NOPASSWD trên %s", target.getName()),
+                        testSudoCmd);
+            }
+
+            String mkdirCmd = "mkdir -p ~/ansible-k8s && cd ~/ansible-k8s && pwd";
+            runCommandWithLog(taskId, ansibleServer, "Tạo thư mục ~/ansible-k8s", mkdirCmd);
+
+            // Nếu có MASTER/WORKER thì tạo hosts.ini, nếu không thì bỏ qua bước này
+            if (!masterAndWorker.isEmpty()) {
+                List<ServerEntity> masters = masterAndWorker.stream()
+                        .filter(s -> "MASTER".equalsIgnoreCase(s.getRole()))
+                        .collect(Collectors.toList());
+
+                StringBuilder createHostsIniCmd = new StringBuilder("cd ~/ansible-k8s && cat > hosts.ini << 'HOSTS_EOF'\n");
+                createHostsIniCmd.append("[k8s_masters]\n");
+                for (ServerEntity master : masters) {
+                    createHostsIniCmd.append(String.format("master ansible_host=%s ansible_user=%s\n",
+                            master.getIp(), master.getUsername()));
+                }
+                createHostsIniCmd.append("\n[k8s_workers]\n");
+                List<ServerEntity> workers = masterAndWorker.stream()
+                        .filter(s -> "WORKER".equalsIgnoreCase(s.getRole()))
+                        .collect(Collectors.toList());
+                int workerIndex = 1;
+                for (ServerEntity worker : workers) {
+                    createHostsIniCmd.append(String.format("worker%d ansible_host=%s ansible_user=%s\n",
+                            workerIndex++, worker.getIp(), worker.getUsername()));
+                }
+                createHostsIniCmd.append("\n[k8s_all:children]\n")
+                        .append("k8s_masters\n")
+                        .append("k8s_workers\n")
+                        .append("\n[k8s_all:vars]\n")
+                        .append("ansible_python_interpreter=/usr/bin/python3\n")
+                        .append("HOSTS_EOF");
+                runCommandWithLog(taskId, ansibleServer, "Tạo file hosts.ini", createHostsIniCmd.toString());
+            }
+
+            String createAnsibleCfgCmd = "cd ~/ansible-k8s && cat > ansible.cfg << 'CFG_EOF'\n" +
+                    "[defaults]\n" +
+                    "inventory = ./hosts.ini\n" +
+                    "host_key_checking = False\n" +
+                    "timeout = 30\n" +
+                    "interpreter_python = auto_silent\n" +
+                    "\n" +
+                    "[privilege_escalation]\n" +
+                    "become = True\n" +
+                    "become_method = sudo\n" +
+                    "CFG_EOF";
+            runCommandWithLog(taskId, ansibleServer, "Tạo file ansible.cfg", createAnsibleCfgCmd);
+
+            String ansiblePingCmd = "cd ~/ansible-k8s && ansible all -m ping";
+            runCommandWithLog(taskId, ansibleServer, "Kiểm tra kết nối Ansible (ansible all -m ping)", ansiblePingCmd);
+
+            appendToTaskLog(taskId, "Hoàn tất cài đặt và cấu hình Ansible trên control node.\n");
+            markTaskCompleted(taskId);
+        } catch (Exception e) {
+            markTaskFailed(taskId, "Lỗi: " + e.getMessage());
+        }
     }
 
     @Override
@@ -226,13 +396,7 @@ public class InstallServiceImpl implements InstallService {
         String removeKubesprayDirCmd = "rm -rf ~/kubespray && echo 'Đã xóa thư mục ~/kubespray' || echo 'Thư mục ~/kubespray không tồn tại'";
         runCommandWithLog(ansibleServer, "Xóa thư mục ~/kubespray (nếu có)", removeKubesprayDirCmd, logs);
 
-        // Bước 6: Xóa sudoers config (tùy chọn - chỉ xóa nếu muốn)
-        String removeSudoersCmd = String.format(
-                "sudo rm -f /etc/sudoers.d/%s && echo 'Đã xóa sudoers config' || echo 'Sudoers config không tồn tại'",
-                ansibleServer.getUsername()
-        );
-        runCommandWithLog(ansibleServer, "Xóa sudoers config (tùy chọn)", removeSudoersCmd, logs);
-
+        // Bước 6: Lưu ý: KHÔNG xóa sudoers config vì nó còn được dùng cho các mục đích khác (đã được cài khi thêm server vào hệ thống)
         // Bước 7: Xóa Ansible PPA repository (nếu có)
         String removePPACmd = "sudo add-apt-repository --remove -y ppa:ansible/ansible 2>/dev/null && sudo apt-get update -y || echo 'PPA không tồn tại hoặc đã được gỡ'";
         runCommandWithLog(ansibleServer, "Xóa Ansible PPA repository", removePPACmd, logs);
@@ -244,6 +408,68 @@ public class InstallServiceImpl implements InstallService {
         logs.add("===== Hoàn tất gỡ cài đặt Ansible =====");
         logs.add("Lưu ý: SSH keys và Python3 vẫn được giữ lại để sử dụng cho mục đích khác.");
         return logs;
+    }
+
+    @Override
+    public void uninstallAnsibleFromK8sNodes(String taskId) {
+        InstallTaskInfo taskInfo = new InstallTaskInfo(taskId);
+        taskCache.put(taskId, taskInfo);
+        
+        try {
+            List<ServerEntity> allServers = serverRepository.findAll();
+            List<ServerEntity> ansibleServers = allServers.stream()
+                    .filter(s -> "ANSIBLE".equalsIgnoreCase(s.getRole()))
+                    .collect(Collectors.toList());
+
+            if (ansibleServers.isEmpty()) {
+                appendToTaskLog(taskId, "Không tìm thấy server nào có role ANSIBLE để gỡ Ansible.\n");
+                markTaskFailed(taskId, "Không tìm thấy server ANSIBLE");
+                return;
+            }
+
+            ServerEntity ansibleServer = ansibleServers.get(0);
+            String header = String.format("===== Gỡ cài đặt Ansible trên server %s (%s) =====\n",
+                    ansibleServer.getName(), ansibleServer.getIp());
+            appendToTaskLog(taskId, header);
+
+            if (!isServerReachable(ansibleServer)) {
+                appendToTaskLog(taskId, "  - Không thể SSH tới server ANSIBLE, bỏ qua gỡ Ansible.\n");
+                markTaskFailed(taskId, "Không thể SSH tới server ANSIBLE");
+                return;
+            }
+
+            String checkAnsibleCmd = "which ansible && ansible --version || echo 'Ansible chưa được cài đặt'";
+            runCommandWithLog(taskId, ansibleServer, "Kiểm tra Ansible có được cài đặt", checkAnsibleCmd);
+
+            String uninstallAnsibleCmd = String.join(" && ",
+                    "sudo apt-get remove -y ansible",
+                    "sudo apt-get purge -y ansible",
+                    "sudo apt-get autoremove -y"
+            );
+            runCommandWithLog(taskId, ansibleServer, "Gỡ Ansible package", uninstallAnsibleCmd);
+
+            String uninstallSshpassCmd = "sudo apt-get remove -y sshpass 2>/dev/null || echo 'sshpass không được cài đặt hoặc đã được gỡ'";
+            runCommandWithLog(taskId, ansibleServer, "Gỡ sshpass (nếu có)", uninstallSshpassCmd);
+
+            String removeAnsibleDirCmd = "rm -rf ~/ansible-k8s && echo 'Đã xóa thư mục ~/ansible-k8s' || echo 'Thư mục ~/ansible-k8s không tồn tại'";
+            runCommandWithLog(taskId, ansibleServer, "Xóa thư mục ~/ansible-k8s", removeAnsibleDirCmd);
+
+            String removeKubesprayDirCmd = "rm -rf ~/kubespray && echo 'Đã xóa thư mục ~/kubespray' || echo 'Thư mục ~/kubespray không tồn tại'";
+            runCommandWithLog(taskId, ansibleServer, "Xóa thư mục ~/kubespray (nếu có)", removeKubesprayDirCmd);
+
+            // Lưu ý: KHÔNG xóa sudoers config vì nó còn được dùng cho các mục đích khác (đã được cài khi thêm server vào hệ thống)
+            String removePPACmd = "sudo add-apt-repository --remove -y ppa:ansible/ansible 2>/dev/null && sudo apt-get update -y || echo 'PPA không tồn tại hoặc đã được gỡ'";
+            runCommandWithLog(taskId, ansibleServer, "Xóa Ansible PPA repository", removePPACmd);
+
+            String verifyUninstallCmd = "which ansible && echo 'CẢNH BÁO: Ansible vẫn còn được cài đặt' || echo 'Ansible đã được gỡ thành công'";
+            runCommandWithLog(taskId, ansibleServer, "Xác nhận Ansible đã được gỡ", verifyUninstallCmd);
+
+            appendToTaskLog(taskId, "===== Hoàn tất gỡ cài đặt Ansible =====\n");
+            appendToTaskLog(taskId, "Lưu ý: SSH keys và Python3 vẫn được giữ lại để sử dụng cho mục đích khác.\n");
+            markTaskCompleted(taskId);
+        } catch (Exception e) {
+            markTaskFailed(taskId, "Lỗi: " + e.getMessage());
+        }
     }
 
     @Override
@@ -1036,41 +1262,172 @@ public class InstallServiceImpl implements InstallService {
     }
 
     // ================= Helper methods =================
-
-    private ExecuteCommandResponse executeSSHCommand(ServerEntity server, String command) {
-        ExecuteCommandRequest request = new ExecuteCommandRequest();
-        request.setHost(server.getIp());
-        request.setPort(server.getPort());
-        request.setUsername(server.getUsername());
-        request.setPassword(server.getPassword());
-        request.setCommand(command);
-        return sshService.executeCommand(request);
-    }
-
-    private boolean isServerReachable(ServerEntity server) {
-        ExecuteCommandResponse response = executeSSHCommand(server, "echo HEALTHCHECK");
-        return response.isSuccess();
-    }
-
-    private void runCommandWithLog(ServerEntity server, String description, String command, List<String> logs) {
-        String prefix = String.format("  - [%s] ", description);
+    @Override
+    public DockerStatusResponse getDockerStatus() {
+        DockerStatusResponse response = new DockerStatusResponse();
         try {
-            ExecuteCommandResponse result = executeSSHCommand(server, command);
-            if (result.isSuccess()) {
-                logs.add(prefix + "THÀNH CÔNG");
-                if (result.getOutput() != null && !result.getOutput().isEmpty()) {
-                    logs.add("      Output: " + result.getOutput().trim());
+            // Tìm server có role DOCKER
+            List<ServerEntity> allServers = serverRepository.findAll();
+            ServerEntity dockerServer = allServers.stream()
+                    .filter(s -> s != null && "DOCKER".equalsIgnoreCase(s.getRole()))
+                    .findFirst()
+                    .orElse(null);
+
+            if (dockerServer == null) {
+                response.setInstalled(false);
+                response.setDockerHost(null);
+                response.setDockerRole(null);
+                response.setError("Không tìm thấy server với role DOCKER. Vui lòng thêm server với role DOCKER trong trang Servers.");
+                return response;
+            }
+
+            response.setDockerHost(dockerServer.getIp());
+            response.setDockerRole("DOCKER");
+
+            // Kiểm tra server có online/SSH được không
+            if (!isServerReachable(dockerServer)) {
+                response.setInstalled(false);
+                response.setError("Server với role DOCKER (IP: " + dockerServer.getIp() + ") đang offline hoặc không SSH được. Vui lòng kiểm tra kết nối.");
+                return response;
+            }
+
+            // Thực thi lệnh kiểm tra Docker
+            String checkDockerCmd = "docker --version 2>&1 || echo 'NOT_INSTALLED'";
+            String output = serverService.execCommand(dockerServer.getId(), checkDockerCmd, 10000, null);
+
+            if (output != null && !output.trim().isEmpty() && !output.contains("NOT_INSTALLED")) {
+                String version = "Unknown";
+                java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("Docker version ([^,]+)");
+                java.util.regex.Matcher matcher = pattern.matcher(output);
+                if (matcher.find()) {
+                    version = matcher.group(1);
                 }
+                response.setInstalled(true);
+                response.setVersion(version);
+                response.setError(null);
             } else {
-                logs.add(prefix + "THẤT BẠI");
-                String err = result.getError() != null ? result.getError() : result.getOutput();
-                if (err != null && !err.isEmpty()) {
-                    logs.add("      Error: " + err.trim());
-                }
+                response.setInstalled(false);
+                response.setVersion(null);
+                response.setError("Docker chưa được cài đặt hoặc không tìm thấy lệnh docker trên server DOCKER.");
             }
         } catch (Exception e) {
-            String msg = prefix + "LỖI: " + e.getMessage();
-            logs.add(msg);
+            response.setInstalled(false);
+            response.setError("Lỗi khi kiểm tra trạng thái Docker: " + e.getMessage());
+        }
+        return response;
+    }
+
+    /**
+     * Kiểm tra server có thể kết nối được không
+     */
+    private boolean isServerReachable(ServerEntity server) {
+        try {
+            return serverService.pingServer(server.getId(), 5000);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * Thực thi lệnh với streaming output và ghi vào logs (mode cũ - backward compatibility)
+     */
+    private void runCommandWithLog(ServerEntity server, String description, String command, List<String> logs) {
+        String prefix = String.format("  - [%s] ", description);
+        logs.add(prefix + "Bắt đầu...");
+        
+        try {
+            // Tạo output handler để nhận output real-time
+            StringBuilder outputBuilder = new StringBuilder();
+            Consumer<String> outputHandler = (chunk) -> {
+                outputBuilder.append(chunk);
+            };
+            
+            // Sử dụng ServerService.execCommand với streaming support
+            String output = serverService.execCommand(server.getId(), command, 300000, outputHandler); // 5 phút timeout
+            
+            if (output != null && !output.trim().isEmpty()) {
+                logs.add(prefix + "THÀNH CÔNG");
+                // Split output thành từng dòng và thêm vào logs
+                String[] lines = output.split("\n");
+                for (String line : lines) {
+                    if (!line.trim().isEmpty()) {
+                        logs.add("      " + line);
+                    }
+                }
+            } else {
+                logs.add(prefix + "THÀNH CÔNG (không có output)");
+            }
+        } catch (Exception e) {
+            logs.add(prefix + "THẤT BẠI");
+            logs.add("      Error: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Thực thi lệnh với streaming output và ghi vào cache (mode mới - với taskId)
+     */
+    private void runCommandWithLog(String taskId, ServerEntity server, String description, String command) {
+        InstallTaskInfo taskInfo = taskCache.get(taskId);
+        if (taskInfo == null) {
+            return; // Task không tồn tại
+        }
+
+        String prefix = String.format("  - [%s] ", description);
+        appendToTaskLog(taskId, prefix + "Bắt đầu...\n");
+        
+        try {
+            // Tạo output handler để nhận output real-time và append vào cache
+            Consumer<String> outputHandler = (chunk) -> {
+                appendToTaskLog(taskId, chunk);
+            };
+            
+            // Sử dụng ServerService.execCommand với streaming support
+            String output = serverService.execCommand(server.getId(), command, 300000, outputHandler); // 5 phút timeout
+            
+            if (output != null && !output.trim().isEmpty()) {
+                appendToTaskLog(taskId, prefix + "THÀNH CÔNG\n");
+                // Output đã được append real-time qua outputHandler, không cần append lại
+            } else {
+                appendToTaskLog(taskId, prefix + "THÀNH CÔNG (không có output)\n");
+            }
+        } catch (Exception e) {
+            appendToTaskLog(taskId, prefix + "THẤT BẠI\n");
+            appendToTaskLog(taskId, "      Error: " + e.getMessage() + "\n");
+        }
+    }
+
+    /**
+     * Helper method để append log vào task cache
+     */
+    private void appendToTaskLog(String taskId, String log) {
+        InstallTaskInfo taskInfo = taskCache.get(taskId);
+        if (taskInfo != null && "running".equals(taskInfo.status)) {
+            synchronized (taskInfo.logs) {
+                taskInfo.logs.append(log);
+            }
+        }
+    }
+
+    /**
+     * Helper method để mark task as completed
+     */
+    private void markTaskCompleted(String taskId) {
+        InstallTaskInfo taskInfo = taskCache.get(taskId);
+        if (taskInfo != null) {
+            taskInfo.status = "completed";
+            taskInfo.endTime = System.currentTimeMillis();
+        }
+    }
+
+    /**
+     * Helper method để mark task as failed
+     */
+    private void markTaskFailed(String taskId, String error) {
+        InstallTaskInfo taskInfo = taskCache.get(taskId);
+        if (taskInfo != null) {
+            taskInfo.status = "failed";
+            taskInfo.endTime = System.currentTimeMillis();
+            taskInfo.error = error;
         }
     }
 
@@ -1135,6 +1492,641 @@ public class InstallServiceImpl implements InstallService {
             return "node";
         }
         return name.toLowerCase().replaceAll("[^a-z0-9_-]", "_");
+    }
+
+    // ================= Methods mới với taskId để hỗ trợ polling =================
+
+    @Override
+    public InstallStatusResponse getInstallStatus(String taskId) {
+        InstallTaskInfo taskInfo = taskCache.get(taskId);
+        if (taskInfo == null) {
+            InstallStatusResponse response = new InstallStatusResponse();
+            response.setTaskId(taskId);
+            response.setStatus("not_found");
+            response.setLogs("");
+            response.setError("Task không tồn tại hoặc đã hết hạn");
+            return response;
+        }
+
+        InstallStatusResponse response = new InstallStatusResponse();
+        response.setTaskId(taskId);
+        response.setStatus(taskInfo.status);
+        response.setLogs(taskInfo.logs.toString());
+        response.setStartTime(taskInfo.startTime);
+        response.setEndTime(taskInfo.endTime);
+        response.setError(taskInfo.error);
+        return response;
+    }
+
+    @Override
+    public void installKubernetesWithKubespray(String taskId) {
+        InstallTaskInfo taskInfo = new InstallTaskInfo(taskId);
+        taskCache.put(taskId, taskInfo);
+        
+        try {
+            List<ServerEntity> allServers = serverRepository.findAll();
+            
+            List<ServerEntity> ansibleServers = allServers.stream()
+                    .filter(s -> "ANSIBLE".equalsIgnoreCase(s.getRole()))
+                    .collect(Collectors.toList());
+            
+            if (ansibleServers.isEmpty()) {
+                appendToTaskLog(taskId, "Không tìm thấy server nào có role ANSIBLE để chạy Kubespray.\n");
+                markTaskFailed(taskId, "Không tìm thấy server ANSIBLE");
+                return;
+            }
+            
+            List<ServerEntity> masters = allServers.stream()
+                    .filter(s -> "MASTER".equalsIgnoreCase(s.getRole()))
+                    .collect(Collectors.toList());
+            
+            List<ServerEntity> workers = allServers.stream()
+                    .filter(s -> "WORKER".equalsIgnoreCase(s.getRole()))
+                    .collect(Collectors.toList());
+            
+            if (masters.isEmpty()) {
+                appendToTaskLog(taskId, "Không tìm thấy server MASTER nào.\n");
+                markTaskFailed(taskId, "Không tìm thấy server MASTER");
+                return;
+            }
+            
+            ServerEntity ansibleServer = ansibleServers.get(0);
+            
+            if (!isServerReachable(ansibleServer)) {
+                appendToTaskLog(taskId, "Không thể SSH tới server ANSIBLE.\n");
+                markTaskFailed(taskId, "Không thể SSH tới server ANSIBLE");
+                return;
+            }
+            
+            appendToTaskLog(taskId, "===== Bắt đầu cài đặt Kubernetes bằng Kubespray =====\n");
+            appendToTaskLog(taskId, String.format("ANSIBLE Server: %s (%s)\n", ansibleServer.getName(), ansibleServer.getIp()));
+            appendToTaskLog(taskId, String.format("Số MASTER nodes: %d\n", masters.size()));
+            appendToTaskLog(taskId, String.format("Số WORKER nodes: %d\n", workers.size()));
+            
+            String cloneKubesprayCmd = "cd ~ && if [ -d kubespray ]; then cd kubespray && git pull; else git clone https://github.com/kubernetes-sigs/kubespray.git && cd kubespray; fi";
+            runCommandWithLog(taskId, ansibleServer, "Bước 1: Clone/Update Kubespray repository", cloneKubesprayCmd);
+            
+            String installDepsCmd = "cd ~/kubespray && sudo apt-get update -y && sudo apt-get install -y python3-pip && pip3 install -r requirements.txt";
+            runCommandWithLog(taskId, ansibleServer, "Bước 2: Cài đặt Kubespray dependencies", installDepsCmd);
+            
+            String copyInventoryCmd = "cd ~/kubespray && cp -rfp inventory/sample inventory/mycluster";
+            runCommandWithLog(taskId, ansibleServer, "Bước 3: Copy sample inventory", copyInventoryCmd);
+            
+            String hostsYaml = buildKubesprayHostsYaml(masters, workers);
+            String createHostsYamlCmd = String.format(
+                    "cd ~/kubespray && cat > inventory/mycluster/hosts.yaml << 'HOSTS_EOF'\n%s\nHOSTS_EOF",
+                    hostsYaml
+            );
+            runCommandWithLog(taskId, ansibleServer, "Bước 4: Tạo hosts.yaml inventory", createHostsYamlCmd);
+            
+            String catHostsCmd = "cd ~/kubespray && cat inventory/mycluster/hosts.yaml";
+            runCommandWithLog(taskId, ansibleServer, "Bước 5: Kiểm tra nội dung hosts.yaml", catHostsCmd);
+            
+            String runPlaybookCmd = "cd ~/kubespray && ansible-playbook -i inventory/mycluster/hosts.yaml --become --become-user=root cluster.yml";
+            runCommandWithLog(taskId, ansibleServer, "Bước 6: Chạy Kubespray playbook (có thể mất 15-30 phút)", runPlaybookCmd);
+            
+            ServerEntity masterNode = masters.get(0);
+            if (isServerReachable(masterNode)) {
+                String checkClusterCmd = "mkdir -p $HOME/.kube && sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config 2>/dev/null; sudo chown $(id -u):$(id -g) $HOME/.kube/config 2>/dev/null; kubectl get nodes -o wide";
+                runCommandWithLog(taskId, masterNode, "Bước 7: Kiểm tra cluster trên master", checkClusterCmd);
+            }
+            
+            appendToTaskLog(taskId, "===== Hoàn tất cài đặt Kubernetes bằng Kubespray =====\n");
+            markTaskCompleted(taskId);
+        } catch (Exception e) {
+            markTaskFailed(taskId, "Lỗi: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public void uninstallKubernetesFromK8sNodes(String taskId) {
+        InstallTaskInfo taskInfo = new InstallTaskInfo(taskId);
+        taskCache.put(taskId, taskInfo);
+        try {
+            // TODO: Implement đầy đủ logic
+            appendToTaskLog(taskId, "Chức năng đang được phát triển...\n");
+            markTaskFailed(taskId, "Chức năng chưa được implement");
+        } catch (Exception e) {
+            markTaskFailed(taskId, "Lỗi: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public void installK8sAddons(String taskId) {
+        InstallTaskInfo taskInfo = new InstallTaskInfo(taskId);
+        taskCache.put(taskId, taskInfo);
+        
+        try {
+            List<ServerEntity> allServers = serverRepository.findAll();
+            
+            List<ServerEntity> masters = allServers.stream()
+                    .filter(s -> "MASTER".equalsIgnoreCase(s.getRole()))
+                    .collect(Collectors.toList());
+            
+            if (masters.isEmpty()) {
+                appendToTaskLog(taskId, "Không tìm thấy server MASTER nào.\n");
+                markTaskFailed(taskId, "Không tìm thấy server MASTER");
+                return;
+            }
+            
+            ServerEntity masterNode = masters.get(0);
+            
+            if (!isServerReachable(masterNode)) {
+                appendToTaskLog(taskId, "Không thể SSH tới server MASTER: " + masterNode.getName() + "\n");
+                markTaskFailed(taskId, "Không thể SSH tới server MASTER");
+                return;
+            }
+            
+            appendToTaskLog(taskId, "===== Bắt đầu cài đặt Kubernetes Addons trên " + masterNode.getName() + " =====\n");
+            
+            String enableStrictArpCmd = "kubectl get configmap kube-proxy -n kube-system -o yaml | " +
+                    "sed -e 's/strictARP: false/strictARP: true/' | " +
+                    "kubectl apply -f - -n kube-system";
+            runCommandWithLog(taskId, masterNode, "Bước 1.1: Bật strict ARP mode cho kube-proxy", enableStrictArpCmd);
+            
+            String installMetalLBCmd = "kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.12/config/manifests/metallb-native.yaml";
+            runCommandWithLog(taskId, masterNode, "Bước 1.2: Cài đặt MetalLB v0.13.12", installMetalLBCmd);
+            
+            String waitMetalLBCmd = "for i in {1..60}; do " +
+                    "controller=$(kubectl get pods -n metallb-system -l app=metallb,component=controller --no-headers 2>/dev/null | grep -c Running || echo 0); " +
+                    "speaker=$(kubectl get pods -n metallb-system -l app=metallb,component=speaker --no-headers 2>/dev/null | grep -c Running || echo 0); " +
+                    "if [ $controller -gt 0 ] && [ $speaker -gt 0 ]; then echo 'MetalLB pods đã sẵn sàng'; exit 0; fi; " +
+                    "sleep 5; done; echo 'Timeout: MetalLB pods chưa sẵn sàng'";
+            runCommandWithLog(taskId, masterNode, "Bước 1.3: Đợi MetalLB pods sẵn sàng", waitMetalLBCmd);
+            
+            String masterIp = masterNode.getIp();
+            String[] ipParts = masterIp.split("\\.");
+            String ipPrefix = ipParts[0] + "." + ipParts[1] + "." + ipParts[2];
+            String ipPoolStart = ipPrefix + ".240";
+            String ipPoolEnd = ipPrefix + ".250";
+            
+            String createIPPoolCmd = "cat <<EOF | kubectl apply -f -\n" +
+                    "apiVersion: metallb.io/v1beta1\n" +
+                    "kind: IPAddressPool\n" +
+                    "metadata:\n" +
+                    "  name: default-pool\n" +
+                    "  namespace: metallb-system\n" +
+                    "spec:\n" +
+                    "  addresses:\n" +
+                    "  - " + ipPoolStart + "-" + ipPoolEnd + "\n" +
+                    "EOF";
+            runCommandWithLog(taskId, masterNode, "Bước 1.4: Tạo IPAddressPool (" + ipPoolStart + "-" + ipPoolEnd + ")", createIPPoolCmd);
+            
+            String createL2AdvCmd = "cat <<EOF | kubectl apply -f -\n" +
+                    "apiVersion: metallb.io/v1beta1\n" +
+                    "kind: L2Advertisement\n" +
+                    "metadata:\n" +
+                    "  name: default-l2-advertisement\n" +
+                    "  namespace: metallb-system\n" +
+                    "spec:\n" +
+                    "  ipAddressPools:\n" +
+                    "  - default-pool\n" +
+                    "EOF";
+            runCommandWithLog(taskId, masterNode, "Bước 1.5: Tạo L2Advertisement", createL2AdvCmd);
+            
+            String installNginxIngressCmd = "kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.9.4/deploy/static/provider/baremetal/deploy.yaml";
+            runCommandWithLog(taskId, masterNode, "Bước 2.1: Cài đặt NGINX Ingress Controller v1.9.4", installNginxIngressCmd);
+            
+            String waitNginxCmd = "for i in {1..90}; do " +
+                    "ready=$(kubectl get pods -n ingress-nginx -l app.kubernetes.io/component=controller --no-headers 2>/dev/null | grep -c Running || echo 0); " +
+                    "if [ $ready -gt 0 ]; then echo 'NGINX Ingress Controller đã sẵn sàng'; exit 0; fi; " +
+                    "sleep 5; done; echo 'Timeout: NGINX Ingress Controller chưa sẵn sàng'";
+            runCommandWithLog(taskId, masterNode, "Bước 2.2: Đợi NGINX Ingress Controller sẵn sàng", waitNginxCmd);
+            
+            String patchNginxServiceCmd = "kubectl patch svc ingress-nginx-controller -n ingress-nginx " +
+                    "-p '{\"spec\": {\"type\": \"LoadBalancer\"}}'";
+            runCommandWithLog(taskId, masterNode, "Bước 2.3: Chuyển NGINX Ingress Service sang LoadBalancer", patchNginxServiceCmd);
+            
+            String waitExternalIPCmd = "for i in {1..30}; do " +
+                    "external_ip=$(kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null); " +
+                    "if [ -n \"$external_ip\" ]; then echo \"NGINX Ingress External IP: $external_ip\"; exit 0; fi; " +
+                    "sleep 3; done; echo 'Chưa có External IP (có thể cần kiểm tra MetalLB)'";
+            runCommandWithLog(taskId, masterNode, "Bước 2.4: Kiểm tra External IP", waitExternalIPCmd);
+            
+            String installLocalPathCmd = "kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.26/deploy/local-path-storage.yaml";
+            runCommandWithLog(taskId, masterNode, "Bước 3.1: Cài đặt Local Path Provisioner v0.0.26", installLocalPathCmd);
+            
+            String waitLocalPathCmd = "for i in {1..60}; do " +
+                    "ready=$(kubectl get pods -n local-path-storage --no-headers 2>/dev/null | grep -c Running || echo 0); " +
+                    "if [ $ready -gt 0 ]; then echo 'Local Path Provisioner đã sẵn sàng'; exit 0; fi; " +
+                    "sleep 5; done; echo 'Timeout: Local Path Provisioner chưa sẵn sàng'";
+            runCommandWithLog(taskId, masterNode, "Bước 3.2: Đợi Local Path Provisioner sẵn sàng", waitLocalPathCmd);
+            
+            String setDefaultStorageClassCmd = "kubectl patch storageclass local-path " +
+                    "-p '{\"metadata\": {\"annotations\":{\"storageclass.kubernetes.io/is-default-class\":\"true\"}}}'";
+            runCommandWithLog(taskId, masterNode, "Bước 3.3: Đặt local-path làm default StorageClass", setDefaultStorageClassCmd);
+            
+            String checkMetalLBCmd = "kubectl get pods -n metallb-system";
+            runCommandWithLog(taskId, masterNode, "Kiểm tra MetalLB pods", checkMetalLBCmd);
+            
+            String checkNginxCmd = "kubectl get pods -n ingress-nginx && kubectl get svc -n ingress-nginx";
+            runCommandWithLog(taskId, masterNode, "Kiểm tra NGINX Ingress Controller", checkNginxCmd);
+            
+            String checkStorageClassCmd = "kubectl get storageclass && kubectl get pods -n local-path-storage";
+            runCommandWithLog(taskId, masterNode, "Kiểm tra StorageClass", checkStorageClassCmd);
+            
+            appendToTaskLog(taskId, "===== Hoàn tất cài đặt Kubernetes Addons =====\n");
+            markTaskCompleted(taskId);
+        } catch (Exception e) {
+            markTaskFailed(taskId, "Lỗi: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public void uninstallK8sAddons(String taskId) {
+        InstallTaskInfo taskInfo = new InstallTaskInfo(taskId);
+        taskCache.put(taskId, taskInfo);
+        try {
+            // TODO: Implement đầy đủ logic
+            appendToTaskLog(taskId, "Chức năng đang được phát triển...\n");
+            markTaskFailed(taskId, "Chức năng chưa được implement");
+        } catch (Exception e) {
+            markTaskFailed(taskId, "Lỗi: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public void installMetricsServer(String taskId) {
+        InstallTaskInfo taskInfo = new InstallTaskInfo(taskId);
+        taskCache.put(taskId, taskInfo);
+        
+        try {
+            List<ServerEntity> allServers = serverRepository.findAll();
+            
+            List<ServerEntity> masters = allServers.stream()
+                    .filter(s -> "MASTER".equalsIgnoreCase(s.getRole()))
+                    .collect(Collectors.toList());
+            
+            if (masters.isEmpty()) {
+                appendToTaskLog(taskId, "Không tìm thấy server MASTER nào.\n");
+                markTaskFailed(taskId, "Không tìm thấy server MASTER");
+                return;
+            }
+            
+            ServerEntity masterNode = masters.get(0);
+            
+            if (!isServerReachable(masterNode)) {
+                appendToTaskLog(taskId, "Không thể SSH tới server MASTER: " + masterNode.getName() + "\n");
+                markTaskFailed(taskId, "Không thể SSH tới server MASTER");
+                return;
+            }
+            
+            appendToTaskLog(taskId, "===== Bắt đầu cài đặt Metrics Server trên " + masterNode.getName() + " =====\n");
+            
+            String installMetricsServerCmd = "kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml";
+            runCommandWithLog(taskId, masterNode, "Bước 1: Cài đặt Metrics Server", installMetricsServerCmd);
+            
+            String patchMetricsServerCmd = "kubectl patch deployment metrics-server -n kube-system --type='json' " +
+                    "-p='[{\"op\": \"add\", \"path\": \"/spec/template/spec/containers/0/args/-\", \"value\": \"--kubelet-insecure-tls\"}]'";
+            runCommandWithLog(taskId, masterNode, "Bước 2: Patch Metrics Server để bỏ qua TLS verification", patchMetricsServerCmd);
+            
+            appendToTaskLog(taskId, "Bước 3: Đợi Metrics Server pods sẵn sàng...\n");
+            String waitMetricsServerCmd = "for i in {1..60}; do " +
+                    "ready=$(kubectl get pods -n kube-system -l k8s-app=metrics-server --no-headers 2>/dev/null | grep -c Running || echo 0); " +
+                    "if [ $ready -gt 0 ]; then echo 'Metrics Server đã sẵn sàng'; exit 0; fi; " +
+                    "sleep 5; done; echo 'Timeout: Metrics Server chưa sẵn sàng'";
+            runCommandWithLog(taskId, masterNode, "Bước 3: Kiểm tra Metrics Server pods", waitMetricsServerCmd);
+            
+            appendToTaskLog(taskId, "Bước 4: Kiểm tra Metrics Server hoạt động...\n");
+            String testMetricsCmd = "kubectl top nodes 2>/dev/null && echo 'Metrics Server hoạt động bình thường' || echo 'Metrics Server chưa sẵn sàng, có thể cần đợi thêm'";
+            runCommandWithLog(taskId, masterNode, "Bước 4: Kiểm tra kubectl top nodes", testMetricsCmd);
+            
+            String testPodsMetricsCmd = "kubectl top pods --all-namespaces 2>/dev/null | head -5 && echo '...' || echo 'Chưa có pods để hiển thị metrics'";
+            runCommandWithLog(taskId, masterNode, "Bước 5: Kiểm tra kubectl top pods", testPodsMetricsCmd);
+            
+            appendToTaskLog(taskId, "===== KIỂM TRA KẾT QUẢ CÀI ĐẶT =====\n");
+            String checkMetricsServerCmd = "kubectl get pods -n kube-system -l k8s-app=metrics-server";
+            runCommandWithLog(taskId, masterNode, "Kiểm tra Metrics Server pods", checkMetricsServerCmd);
+            
+            String checkDeploymentCmd = "kubectl get deployment metrics-server -n kube-system";
+            runCommandWithLog(taskId, masterNode, "Kiểm tra Metrics Server deployment", checkDeploymentCmd);
+            
+            appendToTaskLog(taskId, "===== Hoàn tất cài đặt Metrics Server =====\n");
+            appendToTaskLog(taskId, "Lưu ý: Metrics Server cần vài phút để thu thập metrics. Sử dụng 'kubectl top nodes' và 'kubectl top pods' để kiểm tra.\n");
+            markTaskCompleted(taskId);
+        } catch (Exception e) {
+            markTaskFailed(taskId, "Lỗi: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public void uninstallMetricsServer(String taskId) {
+        InstallTaskInfo taskInfo = new InstallTaskInfo(taskId);
+        taskCache.put(taskId, taskInfo);
+        try {
+            // TODO: Implement đầy đủ logic
+            appendToTaskLog(taskId, "Chức năng đang được phát triển...\n");
+            markTaskFailed(taskId, "Chức năng chưa được implement");
+        } catch (Exception e) {
+            markTaskFailed(taskId, "Lỗi: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public void installDocker(String taskId) {
+        InstallTaskInfo taskInfo = new InstallTaskInfo(taskId);
+        taskCache.put(taskId, taskInfo);
+        try {
+            // TODO: Implement đầy đủ logic
+            appendToTaskLog(taskId, "Chức năng đang được phát triển...\n");
+            markTaskFailed(taskId, "Chức năng chưa được implement");
+        } catch (Exception e) {
+            markTaskFailed(taskId, "Lỗi: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public void uninstallDocker(String taskId) {
+        InstallTaskInfo taskInfo = new InstallTaskInfo(taskId);
+        taskCache.put(taskId, taskInfo);
+        try {
+            // TODO: Implement đầy đủ logic
+            appendToTaskLog(taskId, "Chức năng đang được phát triển...\n");
+            markTaskFailed(taskId, "Chức năng chưa được implement");
+        } catch (Exception e) {
+            markTaskFailed(taskId, "Lỗi: " + e.getMessage());
+        }
+    }
+
+    // ==================== Ansible Config Methods ====================
+
+    @Override
+    public AnsibleConfigResponse getAnsibleConfig() {
+        AnsibleConfigResponse response = new AnsibleConfigResponse();
+        
+        try {
+            List<ServerEntity> allServers = serverRepository.findAll();
+            List<ServerEntity> ansibleServers = allServers.stream()
+                    .filter(s -> "ANSIBLE".equalsIgnoreCase(s.getRole()))
+                    .collect(Collectors.toList());
+
+            if (ansibleServers.isEmpty()) {
+                response.setSuccess(false);
+                response.setError("Không tìm thấy server nào có role ANSIBLE");
+                return response;
+            }
+
+            ServerEntity ansibleServer = ansibleServers.get(0);
+            response.setControllerHost(ansibleServer.getIp());
+
+            if (!isServerReachable(ansibleServer)) {
+                response.setSuccess(false);
+                response.setError("Không thể SSH tới server ANSIBLE");
+                return response;
+            }
+
+            // Đọc ansible.cfg từ ~/ansible-k8s/ansible.cfg
+            String cfg = "";
+            try {
+                String readCfgCmd = "cat ~/ansible-k8s/ansible.cfg 2>/dev/null || echo ''";
+                String output = serverService.execCommand(ansibleServer.getId(), readCfgCmd, 10000, null);
+                if (output != null && !output.trim().isEmpty() && !output.trim().equals("''")) {
+                    cfg = output.trim();
+                }
+            } catch (Exception e) {
+                System.err.println("Lỗi khi đọc ansible.cfg: " + e.getMessage());
+                cfg = "";
+            }
+
+            // Đọc hosts.ini từ ~/ansible-k8s/hosts.ini
+            String inventory = "";
+            try {
+                String readInventoryCmd = "cat ~/ansible-k8s/hosts.ini 2>/dev/null || echo ''";
+                String output = serverService.execCommand(ansibleServer.getId(), readInventoryCmd, 10000, null);
+                if (output != null && !output.trim().isEmpty() && !output.trim().equals("''")) {
+                    inventory = output.trim();
+                }
+            } catch (Exception e) {
+                System.err.println("Lỗi khi đọc hosts.ini: " + e.getMessage());
+                inventory = "";
+            }
+
+            // Đọc group_vars/all.yml từ ~/ansible-k8s/group_vars/all.yml hoặc ~/kubespray/inventory/mycluster/group_vars/all/all.yml
+            String vars = "";
+            try {
+                // Thử đọc từ ~/ansible-k8s/group_vars/all.yml trước
+                String readVarsCmd = "cat ~/ansible-k8s/group_vars/all.yml 2>/dev/null || " +
+                                     "cat ~/kubespray/inventory/mycluster/group_vars/all/all.yml 2>/dev/null || echo ''";
+                String output = serverService.execCommand(ansibleServer.getId(), readVarsCmd, 10000, null);
+                if (output != null && !output.trim().isEmpty() && !output.trim().equals("''")) {
+                    vars = output.trim();
+                }
+            } catch (Exception e) {
+                System.err.println("Lỗi khi đọc group_vars/all.yml: " + e.getMessage());
+                vars = "";
+            }
+
+            response.setSuccess(true);
+            response.setAnsibleCfg(cfg);
+            response.setAnsibleInventory(inventory);
+            response.setAnsibleVars(vars);
+
+        } catch (Exception e) {
+            response.setSuccess(false);
+            response.setError("Lỗi: " + e.getMessage());
+        }
+
+        return response;
+    }
+
+    @Override
+    public AnsibleOperationResponse saveAnsibleConfig(SaveAnsibleConfigRequest request) {
+        AnsibleOperationResponse response = new AnsibleOperationResponse();
+        
+        try {
+            List<ServerEntity> allServers = serverRepository.findAll();
+            List<ServerEntity> ansibleServers = allServers.stream()
+                    .filter(s -> "ANSIBLE".equalsIgnoreCase(s.getRole()))
+                    .collect(Collectors.toList());
+
+            if (ansibleServers.isEmpty()) {
+                response.setSuccess(false);
+                response.setError("Không tìm thấy server nào có role ANSIBLE");
+                response.setMessage("Không tìm thấy server ANSIBLE");
+                return response;
+            }
+
+            ServerEntity ansibleServer = ansibleServers.get(0);
+
+            if (!isServerReachable(ansibleServer)) {
+                response.setSuccess(false);
+                response.setError("Không thể SSH tới server ANSIBLE");
+                response.setMessage("Không thể SSH tới server ANSIBLE");
+                return response;
+            }
+
+            String sudoPassword = request.getSudoPassword();
+            String cfgContent = request.getAnsibleCfg() != null ? request.getAnsibleCfg() : "";
+            String inventoryContent = request.getAnsibleInventory() != null ? request.getAnsibleInventory() : "";
+            String varsContent = request.getAnsibleVars() != null ? request.getAnsibleVars() : "";
+
+            // Tạo thư mục nếu chưa có
+            String mkdirCmd = "mkdir -p ~/ansible-k8s/group_vars";
+            if (sudoPassword != null && !sudoPassword.trim().isEmpty()) {
+                // Nếu có sudo password, cần dùng echo để pass password
+                String mkdirWithSudoCmd = String.format("echo '%s' | sudo -S mkdir -p ~/ansible-k8s/group_vars 2>/dev/null || mkdir -p ~/ansible-k8s/group_vars", sudoPassword);
+                serverService.execCommand(ansibleServer.getId(), mkdirWithSudoCmd, 10000, null);
+            } else {
+                serverService.execCommand(ansibleServer.getId(), mkdirCmd, 10000, null);
+            }
+
+            // Ghi ansible.cfg
+            String writeCfgCmd = String.format(
+                    "cd ~/ansible-k8s && cat > ansible.cfg << 'EOFCFG'\n%s\nEOFCFG",
+                    cfgContent
+            );
+            serverService.execCommand(ansibleServer.getId(), writeCfgCmd, 10000, null);
+
+            // Ghi hosts.ini
+            String writeInventoryCmd = String.format(
+                    "cd ~/ansible-k8s && cat > hosts.ini << 'EOFINV'\n%s\nEOFINV",
+                    inventoryContent
+            );
+            serverService.execCommand(ansibleServer.getId(), writeInventoryCmd, 10000, null);
+
+            // Ghi group_vars/all.yml (nếu có nội dung)
+            if (!varsContent.trim().isEmpty()) {
+                String writeVarsCmd = String.format(
+                        "cd ~/ansible-k8s && mkdir -p group_vars && cat > group_vars/all.yml << 'EOFVARS'\n%s\nEOFVARS",
+                        varsContent
+                );
+                serverService.execCommand(ansibleServer.getId(), writeVarsCmd, 10000, null);
+            }
+
+            response.setSuccess(true);
+            response.setMessage("Đã lưu cấu hình Ansible thành công");
+
+        } catch (Exception e) {
+            response.setSuccess(false);
+            response.setError("Lỗi: " + e.getMessage());
+            response.setMessage("Không thể lưu cấu hình Ansible: " + e.getMessage());
+        }
+
+        return response;
+    }
+
+    @Override
+    public AnsibleOperationResponse regenerateAnsibleConfig() {
+        AnsibleOperationResponse response = new AnsibleOperationResponse();
+        try {
+            List<ServerEntity> allServers = serverRepository.findAll();
+            List<ServerEntity> ansibleServers = allServers.stream()
+                    .filter(s -> "ANSIBLE".equalsIgnoreCase(s.getRole()))
+                    .collect(Collectors.toList());
+
+            if (ansibleServers.isEmpty()) {
+                response.setSuccess(false);
+                response.setError("Không tìm thấy server nào có role ANSIBLE");
+                response.setMessage("Không tìm thấy server ANSIBLE");
+                return response;
+            }
+
+            // Lấy danh sách MASTER/WORKER khả dụng
+            List<ServerEntity> masterAndWorker = allServers.stream()
+                    .filter(s -> {
+                        String role = s.getRole() != null ? s.getRole().toUpperCase(Locale.ROOT) : "";
+                        String clusterStatus = s.getClusterStatus() != null ? s.getClusterStatus().toUpperCase(Locale.ROOT) : "";
+                        return ("MASTER".equals(role) || "WORKER".equals(role)) && "AVAILABLE".equals(clusterStatus);
+                    })
+                    .collect(Collectors.toList());
+
+            if (masterAndWorker.isEmpty()) {
+                response.setSuccess(false);
+                response.setError("Không tìm thấy server MASTER/WORKER khả dụng");
+                response.setMessage("Không có server MASTER/WORKER để tạo hosts.ini");
+                return response;
+            }
+
+            List<ServerEntity> masters = masterAndWorker.stream()
+                    .filter(s -> "MASTER".equalsIgnoreCase(s.getRole()))
+                    .collect(Collectors.toList());
+
+            if (masters.isEmpty()) {
+                response.setSuccess(false);
+                response.setError("Không tìm thấy server MASTER");
+                response.setMessage("Cần ít nhất 1 server MASTER để tạo hosts.ini");
+                return response;
+            }
+
+            ServerEntity ansibleServer = ansibleServers.get(0);
+            if (!isServerReachable(ansibleServer)) {
+                response.setSuccess(false);
+                response.setError("Không thể SSH tới server ANSIBLE");
+                response.setMessage("Không thể SSH tới server ANSIBLE");
+                return response;
+            }
+
+            // Chuẩn bị thư mục
+            try {
+                serverService.execCommand(ansibleServer.getId(), "mkdir -p ~/ansible-k8s && mkdir -p ~/ansible-k8s/group_vars", 10000, null);
+            } catch (Exception e) {
+                response.setSuccess(false);
+                response.setError("Không thể tạo thư mục ~/ansible-k8s: " + e.getMessage());
+                response.setMessage("Không thể tạo thư mục ~/ansible-k8s");
+                return response;
+            }
+
+            // Tạo hosts.ini
+            StringBuilder createHostsIniCmd = new StringBuilder("cd ~/ansible-k8s && cat > hosts.ini << 'HOSTS_EOF'\n");
+            createHostsIniCmd.append("[k8s_masters]\n");
+            for (ServerEntity master : masters) {
+                createHostsIniCmd.append(String.format("master ansible_host=%s ansible_user=%s\n",
+                        master.getIp(), master.getUsername()));
+            }
+            createHostsIniCmd.append("\n[k8s_workers]\n");
+            List<ServerEntity> workers = masterAndWorker.stream()
+                    .filter(s -> "WORKER".equalsIgnoreCase(s.getRole()))
+                    .collect(Collectors.toList());
+            int workerIndex = 1;
+            for (ServerEntity worker : workers) {
+                createHostsIniCmd.append(String.format("worker%d ansible_host=%s ansible_user=%s\n",
+                        workerIndex++, worker.getIp(), worker.getUsername()));
+            }
+            createHostsIniCmd.append("\n[k8s_all:children]\n")
+                    .append("k8s_masters\n")
+                    .append("k8s_workers\n")
+                    .append("\n[k8s_all:vars]\n")
+                    .append("ansible_python_interpreter=/usr/bin/python3\n")
+                    .append("HOSTS_EOF");
+
+            try {
+                serverService.execCommand(ansibleServer.getId(), createHostsIniCmd.toString(), 10000, null);
+            } catch (Exception e) {
+                response.setSuccess(false);
+                response.setError("Không thể tạo hosts.ini: " + e.getMessage());
+                response.setMessage("Không thể tạo hosts.ini");
+                return response;
+            }
+
+            // Tạo ansible.cfg
+            String createAnsibleCfgCmd = "cd ~/ansible-k8s && cat > ansible.cfg << 'CFG_EOF'\n" +
+                    "[defaults]\n" +
+                    "inventory = ./hosts.ini\n" +
+                    "host_key_checking = False\n" +
+                    "timeout = 30\n" +
+                    "interpreter_python = auto_silent\n" +
+                    "\n" +
+                    "[privilege_escalation]\n" +
+                    "become = True\n" +
+                    "become_method = sudo\n" +
+                    "CFG_EOF";
+            try {
+                serverService.execCommand(ansibleServer.getId(), createAnsibleCfgCmd, 10000, null);
+            } catch (Exception e) {
+                response.setSuccess(false);
+                response.setError("Không thể tạo ansible.cfg: " + e.getMessage());
+                response.setMessage("Không thể tạo ansible.cfg");
+                return response;
+            }
+
+            response.setSuccess(true);
+            response.setMessage("Đã tạo lại ansible.cfg và hosts.ini");
+        } catch (Exception e) {
+            response.setSuccess(false);
+            response.setError("Lỗi: " + e.getMessage());
+            response.setMessage("Không thể tạo lại cấu hình: " + e.getMessage());
+        }
+        return response;
     }
 }
 

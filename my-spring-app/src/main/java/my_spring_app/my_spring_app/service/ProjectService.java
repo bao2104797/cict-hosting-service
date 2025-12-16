@@ -9,6 +9,7 @@ import my_spring_app.my_spring_app.dto.reponse.ProjectFrontendListResponse;
 import my_spring_app.my_spring_app.dto.reponse.ProjectOverviewResponse;
 import my_spring_app.my_spring_app.dto.reponse.ProjectSummaryResponse;
 import my_spring_app.my_spring_app.dto.reponse.ProjectDeploymentHistoryResponse;
+import my_spring_app.my_spring_app.dto.reponse.ProjectRequestHistoryResponse;
 import my_spring_app.my_spring_app.dto.request.CreateProjectRequest;
 
 public interface ProjectService {
@@ -32,5 +33,7 @@ public interface ProjectService {
     void deleteProject(Long projectId, String username);
     
     ProjectDeploymentHistoryResponse getProjectDeploymentHistory(Long projectId);
+    
+    ProjectRequestHistoryResponse getProjectRequestHistory(Long projectId);
 }
 

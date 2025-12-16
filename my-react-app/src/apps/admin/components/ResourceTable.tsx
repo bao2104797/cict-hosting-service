@@ -112,20 +112,19 @@ function TableDropdownMenu<T extends { id: string }>({
           }
         }
         
-        // Đặt vị trí theo chiều ngang: ưu tiên align với cạnh phải của trigger
-        if (spaceRight >= menuWidth) {
-          // Đủ không gian bên phải, align với cạnh phải của trigger
-          menu.style.left = `${triggerRect.right - menuWidth}px`;
-        } else if (spaceLeft >= menuWidth) {
-          // Đủ không gian bên trái, align với cạnh trái của trigger
-          menu.style.left = `${triggerRect.left}px`;
+        // Đặt vị trí theo chiều ngang: đặt menu bên trái trigger để tránh tràn ra màn hình
+        // Menu sẽ kết thúc ở vị trí trigger (right edge của menu = left edge của trigger)
+        const leftPosition = triggerRect.left - menuWidth - 4; // 4px gap
+        
+        if (leftPosition >= 4) {
+          // Đủ không gian bên trái, đặt menu bên trái trigger
+          menu.style.left = `${leftPosition}px`;
+        } else if (spaceRight >= menuWidth) {
+          // Không đủ không gian bên trái, đặt bên phải
+          menu.style.left = `${triggerRect.right + 4}px`;
         } else {
-          // Không đủ không gian, đặt ở vị trí tốt nhất
-          if (spaceRight > spaceLeft) {
-            menu.style.left = `${triggerRect.right - menuWidth}px`;
-          } else {
-            menu.style.left = `${triggerRect.left}px`;
-          }
+          // Không đủ không gian cả hai bên, align với cạnh phải của trigger
+          menu.style.left = `${triggerRect.right - menuWidth}px`;
         }
       };
       updatePosition();

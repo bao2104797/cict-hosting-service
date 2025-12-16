@@ -29,6 +29,8 @@ public class ProjectFrontendListResponse {
         private String dockerImage;
         private String domainNameSystem;
         private String status; // RUNNING, STOPPED, ERROR
+        private String cpu; // CPU usage
+        private String memory; // Memory usage
         private LocalDateTime createdAt;
     }
 }

@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react"
 import { useParams, useNavigate } from "react-router-dom"
-import { ArrowLeft, Copy, CheckCircle2, ExternalLink, MoreVertical, Play, Pause, Trash2, Eye, EyeOff, Plus, Upload, X, Loader2, SlidersHorizontal, Database, Server, Globe, Clock, FolderOpen, FileText, Calendar, Network, HardDrive, User, Key, Check, Package, Code } from "lucide-react"
+import { ArrowLeft, Copy, CheckCircle2, ExternalLink, MoreVertical, Play, Pause, Trash2, Eye, EyeOff, Plus, Upload, X, Loader2, SlidersHorizontal, Database, Server, Globe, Clock, FolderOpen, FileText, Calendar, Network, HardDrive, User, Key, Check, Package, Code, Cpu, MemoryStick } from "lucide-react"
 import { motion } from "framer-motion"
 import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { getProjectById, deployProject, addDatabaseToProject, addBackendToProject, addFrontendToProject } from "@/lib/mock-api"
-import { getProjectBasicInfo, getProjectOverview, getProjectDatabases, getProjectBackends, getProjectFrontends, deleteProject, getProjectDeploymentHistory, deployDatabase, deployBackend, deployFrontend, startProjectFrontend, stopProjectFrontend, startProjectBackend, stopProjectBackend, deleteProjectBackend, deleteProjectFrontend, startProjectDatabase, stopProjectDatabase, deleteProjectDatabase, checkDomainNameSystem, type DatabaseInfo, type BackendInfo, type FrontendInfo, type DeploymentHistoryItem, createBackendScaleRequest, getBackendReplicaInfo, cancelBackendScaleRequest, createFrontendScaleRequest, getFrontendReplicaInfo, cancelFrontendScaleRequest } from "@/lib/project-api"
+import { getProjectBasicInfo, getProjectOverview, getProjectDatabases, getProjectBackends, getProjectFrontends, deleteProject, getProjectDeploymentHistory, getProjectRequestHistory, deployDatabase, deployBackend, deployFrontend, startProjectFrontend, stopProjectFrontend, startProjectBackend, stopProjectBackend, deleteProjectBackend, deleteProjectFrontend, startProjectDatabase, stopProjectDatabase, deleteProjectDatabase, checkDomainNameSystem, type DatabaseInfo, type BackendInfo, type FrontendInfo, type DeploymentHistoryItem, type RequestHistoryItem, createBackendScaleRequest, getBackendReplicaInfo, cancelBackendScaleRequest, createFrontendScaleRequest, getFrontendReplicaInfo, cancelFrontendScaleRequest } from "@/lib/project-api"
 import { useAuth } from "@/contexts/AuthContext"
 import type { Project, ComponentStatus } from "@/types"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -79,6 +79,8 @@ export function ProjectDetail() {
   const [isDeletingResource, setIsDeletingResource] = useState(false)
   const [deploymentHistory, setDeploymentHistory] = useState<DeploymentHistoryItem[]>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
+  const [requestHistory, setRequestHistory] = useState<RequestHistoryItem[]>([])
+  const [loadingRequestHistory, setLoadingRequestHistory] = useState(false)
   const [isDeployingDatabase, setIsDeployingDatabase] = useState(false)
   const [isDeployingBackend, setIsDeployingBackend] = useState(false)
   const [isDeployingFrontend, setIsDeployingFrontend] = useState(false)
@@ -666,6 +668,22 @@ export function ProjectDetail() {
       toast.error("Không thể tải lịch sử triển khai")
     } finally {
       setLoadingHistory(false)
+    }
+  }
+
+  // Load request history
+  const loadRequestHistory = async () => {
+    if (!id) return
+
+    setLoadingRequestHistory(true)
+    try {
+      const response = await getProjectRequestHistory(id)
+      setRequestHistory(response.requestItems || [])
+    } catch (error) {
+      console.error("Lỗi load request history:", error)
+      toast.error("Không thể tải lịch sử yêu cầu")
+    } finally {
+      setLoadingRequestHistory(false)
     }
   }
 
@@ -1422,6 +1440,10 @@ export function ProjectDetail() {
               if (value === "history" && id && deploymentHistory.length === 0 && !loadingHistory) {
                 loadDeploymentHistory()
               }
+              // Khi chuyển sang tab "request-history", load request history
+              if (value === "request-history" && id && requestHistory.length === 0 && !loadingRequestHistory) {
+                loadRequestHistory()
+              }
             }}>
               <TabsList className="w-full justify-start border-b rounded-none">
                 <TabsTrigger value="overview">Tổng quan</TabsTrigger>
@@ -1435,6 +1457,7 @@ export function ProjectDetail() {
                   Frontends ({projectFrontends.length > 0 ? projectFrontends.length : (stats?.frontends?.total ?? displayProject.components.frontends.length)})
                 </TabsTrigger>
                 <TabsTrigger value="history">Lịch sử triển khai</TabsTrigger>
+                <TabsTrigger value="request-history">Lịch sử yêu cầu</TabsTrigger>
               </TabsList>
 
               <TabsContent value="overview" className="p-6">
@@ -1567,6 +1590,8 @@ export function ProjectDetail() {
                       const dbDatabaseName = isApiData ? (db as DatabaseInfo).databaseName : (db as any).databaseName
                       const dbUsername = isApiData ? (db as DatabaseInfo).databaseUsername : (db as any).username
                       const dbPassword = isApiData ? (db as DatabaseInfo).databasePassword : undefined
+                      const dbCpu = isApiData ? (db as DatabaseInfo).cpu : undefined
+                      const dbMemory = isApiData ? (db as DatabaseInfo).memory : undefined
                       const dbId = isApiData ? `api-${(db as DatabaseInfo).id}` : (db as any).id
                       const dbApiId = isApiData ? (db as DatabaseInfo).id : null
                       const rawDbStatus = isApiData ? (db as DatabaseInfo).status : (db as any).status
@@ -1763,6 +1788,64 @@ export function ProjectDetail() {
                                     )}
                                   </div>
                                 )}
+
+                                {/* CPU và Memory Usage */}
+                                {(dbCpu || dbMemory) && (
+                                  <div className="space-y-3 pt-2 border-t border-border/50">
+                                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-2">
+                                      Thông tin tài nguyên
+                                    </Label>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                      {/* CPU Usage */}
+                                      {dbCpu && (
+                                        <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 border border-border/50">
+                                          <Cpu className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                                          <div className="flex-1 min-w-0">
+                                            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">
+                                              CPU Usage
+                                            </Label>
+                                            <div className="flex items-center gap-2">
+                                              <p className="text-sm font-mono truncate">{dbCpu}</p>
+                                              <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-6 w-6 flex-shrink-0"
+                                                onClick={() => copyToClipboard(dbCpu)}
+                                                title="Sao chép CPU"
+                                              >
+                                                <Copy className="w-3 h-3" />
+                                              </Button>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Memory Usage */}
+                                      {dbMemory && (
+                                        <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 border border-border/50">
+                                          <MemoryStick className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                                          <div className="flex-1 min-w-0">
+                                            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">
+                                              Memory Usage
+                                            </Label>
+                                            <div className="flex items-center gap-2">
+                                              <p className="text-sm font-mono truncate">{dbMemory}</p>
+                                              <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-6 w-6 flex-shrink-0"
+                                                onClick={() => copyToClipboard(dbMemory)}
+                                                title="Sao chép Memory"
+                                              >
+                                                <Copy className="w-3 h-3" />
+                                              </Button>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
 
                               <div className="flex justify-end mt-5 pt-4 border-t border-border/50">
@@ -1924,6 +2007,8 @@ export function ProjectDetail() {
                       const beDbName = isApiData ? (be as BackendInfo).databaseName : undefined
                       const beDbUsername = isApiData ? (be as BackendInfo).databaseUsername : undefined
                       const beDbPassword = isApiData ? (be as BackendInfo).databasePassword : undefined
+                      const beCpu = isApiData ? (be as BackendInfo).cpu : undefined
+                      const beMemory = isApiData ? (be as BackendInfo).memory : undefined
                       const beId = isApiData ? `api-be-${(be as BackendInfo).id}` : (be as any).id
                       const beApiId = isApiData ? (be as BackendInfo).id : null
 
@@ -2040,6 +2125,59 @@ export function ProjectDetail() {
                                         </Button>
                                       </div>
                                     </div>
+                                  </div>
+                                )}
+
+                                {/* CPU và Memory Usage */}
+                                {(beCpu || beMemory) && (
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    {/* CPU */}
+                                    {beCpu && (
+                                      <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 border border-border/50">
+                                        <Cpu className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                                        <div className="flex-1 min-w-0">
+                                          <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">
+                                            CPU Usage
+                                          </Label>
+                                          <div className="flex items-center gap-2">
+                                            <p className="text-sm font-mono">{beCpu}</p>
+                                            <Button
+                                              variant="ghost"
+                                              size="icon"
+                                              className="h-6 w-6 flex-shrink-0"
+                                              onClick={() => copyToClipboard(beCpu)}
+                                              title="Sao chép CPU"
+                                            >
+                                              <Copy className="w-3 h-3" />
+                                            </Button>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* Memory */}
+                                    {beMemory && (
+                                      <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 border border-border/50">
+                                        <MemoryStick className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                                        <div className="flex-1 min-w-0">
+                                          <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">
+                                            Memory Usage
+                                          </Label>
+                                          <div className="flex items-center gap-2">
+                                            <p className="text-sm font-mono">{beMemory}</p>
+                                            <Button
+                                              variant="ghost"
+                                              size="icon"
+                                              className="h-6 w-6 flex-shrink-0"
+                                              onClick={() => copyToClipboard(beMemory)}
+                                              title="Sao chép Memory"
+                                            >
+                                              <Copy className="w-3 h-3" />
+                                            </Button>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
                                   </div>
                                 )}
 
@@ -2359,6 +2497,8 @@ export function ProjectDetail() {
                       const feStatus = getStatusBadge(isApiData ? (fe as FrontendInfo).status.toLowerCase() as ComponentStatus : (fe as any).status)
                       const feDns = isApiData ? (fe as FrontendInfo).domainNameSystem : (fe as any).publicUrl
                       const feDockerImage = isApiData ? (fe as FrontendInfo).dockerImage : (fe as any).source?.ref
+                      const feCpu = isApiData ? (fe as FrontendInfo).cpu : undefined
+                      const feMemory = isApiData ? (fe as FrontendInfo).memory : undefined
                       const feId = isApiData ? `api-fe-${(fe as FrontendInfo).id}` : (fe as any).id
                       const feApiId = isApiData ? (fe as FrontendInfo).id : null
 
@@ -2480,6 +2620,64 @@ export function ProjectDetail() {
                                           <Copy className="w-3 h-3" />
                                         </Button>
                                       </div>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* CPU và Memory Usage */}
+                                {(feCpu || feMemory) && (
+                                  <div className="space-y-3 pt-2 border-t border-border/50">
+                                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-2">
+                                      Thông tin tài nguyên
+                                    </Label>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                      {/* CPU Usage */}
+                                      {feCpu && (
+                                        <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 border border-border/50">
+                                          <Cpu className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                                          <div className="flex-1 min-w-0">
+                                            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">
+                                              CPU Usage
+                                            </Label>
+                                            <div className="flex items-center gap-2">
+                                              <p className="text-sm font-mono truncate">{feCpu}</p>
+                                              <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-6 w-6 flex-shrink-0"
+                                                onClick={() => copyToClipboard(feCpu)}
+                                                title="Sao chép CPU"
+                                              >
+                                                <Copy className="w-3 h-3" />
+                                              </Button>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Memory Usage */}
+                                      {feMemory && (
+                                        <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 border border-border/50">
+                                          <MemoryStick className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                                          <div className="flex-1 min-w-0">
+                                            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">
+                                              Memory Usage
+                                            </Label>
+                                            <div className="flex items-center gap-2">
+                                              <p className="text-sm font-mono truncate">{feMemory}</p>
+                                              <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-6 w-6 flex-shrink-0"
+                                                onClick={() => copyToClipboard(feMemory)}
+                                                title="Sao chép Memory"
+                                              >
+                                                <Copy className="w-3 h-3" />
+                                              </Button>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
                                     </div>
                                   </div>
                                 )}
@@ -2730,6 +2928,155 @@ export function ProjectDetail() {
                                       )}
                                     </>
                                   )}
+                                </div>
+                              </CardContent>
+                            </Card>
+                          </motion.div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="request-history" className="p-6">
+                {loadingRequestHistory ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+                    <span className="ml-3 text-sm text-muted-foreground">Đang tải lịch sử yêu cầu...</span>
+                  </div>
+                ) : requestHistory.length === 0 ? (
+                  <div className="text-center py-12">
+                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
+                      <Clock className="w-8 h-8 text-muted-foreground" />
+                    </div>
+                    <h3 className="text-lg font-semibold mb-1">Chưa có lịch sử yêu cầu</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Lịch sử các yêu cầu điều chỉnh replicas sẽ hiển thị ở đây
+                    </p>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    {/* Timeline line */}
+                    <div className="absolute left-8 top-0 bottom-0 w-0.5 bg-border" />
+                    
+                    <div className="space-y-6">
+                      {requestHistory.map((item, index) => {
+                        const getTypeIcon = () => {
+                          switch (item.type) {
+                            case "BACKEND":
+                              return <Server className="w-5 h-5" />
+                            case "FRONTEND":
+                              return <Globe className="w-5 h-5" />
+                            default:
+                              return <CheckCircle2 className="w-5 h-5" />
+                          }
+                        }
+                        
+                        const getTypeColor = () => {
+                          switch (item.type) {
+                            case "BACKEND":
+                              return "bg-purple-500 text-white border-purple-500"
+                            case "FRONTEND":
+                              return "bg-green-500 text-white border-green-500"
+                            default:
+                              return "bg-gray-500 text-white border-gray-500"
+                          }
+                        }
+                        
+                        const getStatusBadge = () => {
+                          switch (item.status) {
+                            case "PENDING":
+                              return { variant: "warning" as const, label: "Chờ phê duyệt" }
+                            case "APPROVED":
+                              return { variant: "success" as const, label: "Đã phê duyệt" }
+                            case "REJECTED":
+                              return { variant: "destructive" as const, label: "Đã từ chối" }
+                            default:
+                              return { variant: "secondary" as const, label: item.status }
+                          }
+                        }
+                        
+                        const statusBadge = getStatusBadge()
+                        
+                        return (
+                          <motion.div
+                            key={`${item.type}-${item.id}-${index}`}
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ duration: 0.3, delay: index * 0.05 }}
+                            className="relative pl-20"
+                          >
+                            {/* Timeline dot */}
+                            <div className={`absolute left-6 top-6 w-4 h-4 rounded-full border-2 ${getTypeColor()} flex items-center justify-center z-10`}>
+                              <div className="w-2 h-2 rounded-full bg-white" />
+                            </div>
+                            
+                            <Card className="hover:shadow-md transition-shadow border-l-4" style={{
+                              borderLeftColor: item.type === "BACKEND" ? "#a855f7" : 
+                                             item.type === "FRONTEND" ? "#10b981" : "#6b7280"
+                            }}>
+                              <CardContent className="p-5">
+                                <div className="flex items-start justify-between gap-4 mb-3">
+                                  <div className="flex items-start gap-3 flex-1">
+                                    <div className={`p-2 rounded-lg ${
+                                      item.type === "BACKEND" ? "bg-purple-50 dark:bg-purple-950/30" :
+                                      item.type === "FRONTEND" ? "bg-green-50 dark:bg-green-950/30" :
+                                      "bg-gray-50 dark:bg-gray-950/30"
+                                    }`}>
+                                      <div className={
+                                        item.type === "BACKEND" ? "text-purple-600 dark:text-purple-400" :
+                                        item.type === "FRONTEND" ? "text-green-600 dark:text-green-400" :
+                                        "text-gray-600 dark:text-gray-400"
+                                      }>
+                                        {getTypeIcon()}
+                                      </div>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <Badge variant={statusBadge.variant} className="text-xs">
+                                          {statusBadge.label}
+                                        </Badge>
+                                        <Badge variant="outline" className="text-xs">
+                                          {item.type === "BACKEND" ? "Backend" : "Frontend"}
+                                        </Badge>
+                                        <h4 className="font-semibold text-base truncate">{item.componentName}</h4>
+                                      </div>
+                                      <p className="text-sm text-muted-foreground mb-2">
+                                        Yêu cầu điều chỉnh replicas từ <span className="font-medium text-foreground">{item.oldReplicas}</span> lên <span className="font-medium text-foreground">{item.newReplicas}</span>
+                                      </p>
+                                      {item.reasonReject && (
+                                        <div className="mt-2 p-2 rounded-md bg-destructive/10 border border-destructive/20">
+                                          <p className="text-xs text-destructive font-medium">Lý do từ chối:</p>
+                                          <p className="text-xs text-destructive mt-1">{item.reasonReject}</p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2 text-xs text-muted-foreground whitespace-nowrap">
+                                    <Clock className="w-3.5 h-3.5" />
+                                    <span>
+                                      {new Date(item.createdAt).toLocaleString("vi-VN", {
+                                        day: "2-digit",
+                                        month: "2-digit",
+                                        year: "numeric",
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      })}
+                                    </span>
+                                  </div>
+                                </div>
+                                
+                                {/* Details */}
+                                <div className="flex flex-wrap gap-x-4 gap-y-2 pt-3 border-t border-border">
+                                  <div className="flex items-center gap-1.5 text-xs">
+                                    <span className="text-muted-foreground">Component ID:</span>
+                                    <span className="font-medium">{item.componentId}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 text-xs">
+                                    <span className="text-muted-foreground">Request ID:</span>
+                                    <span className="font-medium">{item.id}</span>
+                                  </div>
                                 </div>
                               </CardContent>
                             </Card>
