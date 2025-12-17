@@ -16,6 +16,7 @@ import { Overview } from "@/apps/admin/pages/Overview"
 import { Servers } from "@/apps/admin/pages/infrastructure/Servers"
 import { Clusters } from "@/apps/admin/pages/infrastructure/Clusters"
 import { ClusterSetup } from "@/apps/admin/pages/infrastructure/ClusterSetup"
+import { ClusterSetupAmd } from "@/apps/admin/pages/infrastructure/ClusterSetupAmd"
 import { ClusterOverview } from "@/apps/admin/pages/cluster/ClusterOverview"
 import { Nodes } from "@/apps/admin/pages/cluster/Nodes"
 import { Namespaces } from "@/apps/admin/pages/cluster/Namespaces"
@@ -113,6 +114,16 @@ function App() {
                 <ProtectedRoute>
                   <AdminLayout>
                     <ClusterSetup />
+                  </AdminLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/infrastructure/cluster-setup-amd"
+              element={
+                <ProtectedRoute>
+                  <AdminLayout>
+                    <ClusterSetupAmd />
                   </AdminLayout>
                 </ProtectedRoute>
               }
